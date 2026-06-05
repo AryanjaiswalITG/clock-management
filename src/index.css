@@ -1,0 +1,1445 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Outfit:wght@300..700&display=swap");
+
+:root {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --ink: #16201d;
+  --ink-soft: #5a6b65;
+  --line: #e4e9e7;
+  --teal: #0f6e63; /* accent — overridden at runtime by ThemeContext */
+  --amber: #d98a2b;
+  --rose: #c2484d;
+  --green: #2f8f5b;
+  /* soft tints derive from the accent/status colour mixed with the surface,
+     so they adapt automatically to the accent choice and to light/dark mode */
+  --teal-soft: color-mix(in srgb, var(--teal) 15%, var(--surface));
+  --amber-soft: color-mix(in srgb, var(--amber) 16%, var(--surface));
+  --rose-soft: color-mix(in srgb, var(--rose) 15%, var(--surface));
+  --green-soft: color-mix(in srgb, var(--green) 15%, var(--surface));
+  /* sidebar + inverted panels (deep, dark in both modes) */
+  --sidebar-bg: #16201d;
+  --sidebar-ink: #cdd8d4;
+  --sidebar-ink-soft: #6f827c;
+  --panel-bg: #16201d;
+  --panel-ink: #ffffff;
+  --panel-ink-soft: #9fb0ab;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(22, 32, 29, 0.04), 0 8px 24px rgba(22, 32, 29, 0.06);
+  --font-body: "Outfit", sans-serif;
+  --font-display: "Fraunces", serif;
+  /* Tiling wave silhouette used to give the liquid-fill hover its rippling top
+     surface. Opaque below the curve, transparent above → works as an alpha mask. */
+  --wfx-wave: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='130'%20height='16'%3E%3Cpath%20d='M0%208%20C21%200%2044%200%2065%208%20S109%2016%20130%208%20L130%2016%20L0%2016%20Z'%20fill='%23000'/%3E%3C/svg%3E");
+}
+
+/* ---- Dark mode ---- */
+[data-theme="dark"] {
+  --bg: #0e1513;
+  --surface: #18211e;
+  --ink: #e9efec;
+  --ink-soft: #9bada7;
+  --line: #28332f;
+  --amber: #e0a050;
+  --rose: #e07377;
+  --green: #56b07e;
+  --sidebar-bg: #0a100e;
+  --sidebar-ink: #c4d0cb;
+  --sidebar-ink-soft: #6a776f;
+  --panel-bg: #0a100e;
+  --panel-ink: #eef3f1;
+  --panel-ink-soft: #8aa39b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background 0.25s ease,
+    color 0.25s ease;
+}
+.card,
+.sidebar,
+.topbar,
+.field-control {
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 248px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-ink);
+  padding: 26px 18px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  isolation: isolate; /* keep the liquid layer contained behind the menu */
+}
+/* Lift the real menu content above the ambient liquid layer. */
+.sidebar > *:not(.sidebar-fx) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Ambient liquid background (always-on, not hover) ---- */
+.sidebar-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.sidebar-fx::before,
+.sidebar-fx::after {
+  content: "";
+  position: absolute;
+  border-radius: 42% 58% 43% 57% / 45% 44% 56% 55%;
+  filter: blur(10px);
+}
+.sidebar-fx::before {
+  width: 260px;
+  height: 260px;
+  left: -78px;
+  top: 6%;
+  background: radial-gradient(
+    circle at 35% 35%,
+    color-mix(in srgb, var(--teal) 88%, transparent),
+    transparent 68%
+  );
+  opacity: 0.5;
+  animation: sidebar-blob-a 1s ease-in-out infinite;
+}
+.sidebar-fx::after {
+  width: 220px;
+  height: 220px;
+  right: -84px;
+  bottom: 7%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--teal) 70%, transparent),
+    transparent 70%
+  );
+  opacity: 0.38;
+  animation: sidebar-blob-b 21s ease-in-out infinite;
+}
+@keyframes sidebar-blob-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    border-radius: 42% 58% 43% 57% / 45% 44% 56% 55%;
+  }
+  50% {
+    transform: translate(34px, 46px) scale(1.12);
+    border-radius: 58% 42% 57% 43% / 55% 56% 44% 45%;
+  }
+}
+@keyframes sidebar-blob-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    border-radius: 58% 42% 57% 43% / 55% 56% 44% 45%;
+  }
+  50% {
+    transform: translate(-28px, -38px) scale(1.16);
+    border-radius: 42% 58% 43% 57% / 45% 44% 56% 55%;
+  }
+}
+/* Pause the drift for users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-fx::before,
+  .sidebar-fx::after {
+    animation: none;
+  }
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 24px;
+}
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--teal);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 20px;
+}
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 21px;
+  color: #fff;
+  font-weight: 600;
+}
+.nav-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--sidebar-ink-soft);
+  padding: 16px 12px 6px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  color: var(--sidebar-ink);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.nav-item.active {
+  background: var(--teal);
+  color: #fff;
+}
+.sidebar-foot {
+  margin-top: auto;
+  padding: 12px;
+  font-size: 12.5px;
+  color: var(--sidebar-ink-soft);
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Floating glassmorphism header */
+.topbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px;
+  position: sticky;
+  top: 14px;
+  z-index: 20;
+  margin: 14px 20px 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  box-shadow:
+    0 6px 22px rgba(22, 32, 29, 0.08),
+    inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+  transition:
+    background 0.3s ease,
+    box-shadow 0.3s ease,
+    margin 0.3s ease,
+    border-radius 0.3s ease,
+    backdrop-filter 0.3s ease;
+}
+/* Once the page is scrolled, make it a touch more solid and lift it higher */
+.topbar.scrolled {
+  background: color-mix(in srgb, var(--surface) 105%, #000);
+  box-shadow:
+    0 12px 34px rgba(22, 32, 29, 0.16),
+    inset 0 1px 20px 10px color-mix(in srgb, #c0a5a5 22%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 36%, #000);
+}
+.topbar h1 {
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 600;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  width: 240px;
+}
+.search input {
+  border: none;
+  background: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  width: 100%;
+  color: var(--ink);
+}
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--teal-soft);
+  color: var(--teal);
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+.content {
+  padding: 28px 32px;
+}
+
+/* Left side of the floating header: hamburger + page title. */
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.topbar-left h1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Hamburger + drawer close button: desktop hides them, mobile reveals. */
+.menu-btn,
+.drawer-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 9px;
+  color: var(--ink);
+}
+.menu-btn:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.drawer-close {
+  margin-left: auto;
+  color: var(--sidebar-ink);
+}
+
+/* Any card whose direct child is a table scrolls sideways instead of
+   overflowing the layout, so wide tables (payroll, leave) stay usable. */
+.card:has(> table) {
+  overflow-x: auto;
+}
+
+.grid {
+  display: grid;
+  gap: 18px;
+}
+.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.cols-2 {
+  grid-template-columns: 1.6fr 1fr;
+}
+/* Tablet / small-laptop (≈1024px): stat rows drop to two-up, wide
+   two-column layouts stack so charts & panels keep a usable width. */
+@media (max-width: 1024px) {
+  .cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .cols-2,
+  .cols-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.card-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.card-sub {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 16px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+.stat-delta {
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+.stat-delta.up {
+  color: var(--green);
+}
+.stat-delta.down {
+  color: var(--rose);
+}
+.stat-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  vertical-align: middle;
+}
+tr:last-child td {
+  border-bottom: none;
+}
+.emp-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.emp-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--teal-soft);
+  color: var(--teal);
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.emp-name {
+  font-weight: 500;
+}
+.emp-meta {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.badge.green {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.badge.amber {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.badge.rose {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+.badge.teal {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.badge.gray {
+  background: #eef1f0;
+  color: var(--ink-soft);
+}
+
+.btn {
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  border-radius: 9px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.btn.primary {
+  background: var(--teal);
+  color: #fff;
+}
+.btn.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink);
+}
+.btn.ghost:hover {
+  background: var(--bg);
+}
+.btn.sm {
+  padding: 5px 10px;
+  font-size: 12.5px;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.section-head h2 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+}
+.filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.chip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.chip.active {
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal);
+}
+
+.fade-in {
+  animation: fade 0.4s ease both;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- Auth (login) screen ---- */
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(
+    1200px 600px at 50% -10%,
+    var(--teal-soft) 0%,
+    var(--bg) 60%
+  );
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 32px 30px;
+  box-shadow: var(--shadow);
+}
+.auth-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  text-align: center;
+  margin-top: 4px;
+}
+.auth-sub {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  text-align: center;
+  margin: 4px 0 22px;
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.auth-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin-top: 10px;
+}
+.auth-input {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--ink-soft);
+  transition: border-color 0.15s;
+}
+.auth-input:focus-within {
+  border-color: var(--teal);
+}
+.auth-input input {
+  border: none;
+  outline: none;
+  background: none;
+  font-family: inherit;
+  font-size: 14px;
+  width: 100%;
+  color: var(--ink);
+}
+.auth-hint {
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: center;
+  line-height: 1.7;
+  border-top: 1px dashed var(--line);
+  padding-top: 16px;
+}
+.auth-link {
+  color: var(--teal);
+  font-weight: 600;
+}
+.auth-link:hover {
+  text-decoration: underline;
+}
+.auth-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--rose-soft);
+  color: var(--rose);
+  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.auth-input.invalid {
+  border-color: var(--rose);
+}
+.auth-field-error {
+  font-size: 12px;
+  color: var(--rose);
+  margin: 4px 2px 2px;
+}
+.auth-field-hint {
+  font-size: 12px;
+  margin: 4px 2px 2px;
+}
+.match-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--green);
+}
+.match-bad {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--rose);
+}
+
+/* ---- Avatar photo ---- */
+.avatar,
+.emp-avatar {
+  overflow: hidden;
+}
+.avatar-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+.avatar-edit {
+  position: relative;
+  flex-shrink: 0;
+}
+.avatar-cam {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border: 2px solid var(--surface);
+  transition: transform 0.12s;
+}
+.avatar-cam:hover {
+  transform: scale(1.08);
+}
+
+/* ---- Premium stat cards (accent-tinted, alternates with light/dark mode) ---- */
+.stat-card {
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--teal) 12%, var(--surface)) 0%,
+    var(--surface) 62%
+  );
+  border: 1px solid color-mix(in srgb, var(--teal) 16%, var(--line));
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.25s ease;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(22, 32, 29, 0.12);
+}
+.stat-card .stat-icon {
+  background: color-mix(in srgb, var(--teal) 22%, var(--surface)) !important;
+}
+
+/* ---- Floating header: responsive ---- */
+@media (max-width: 860px) {
+  .topbar {
+    margin: 10px 14px 0;
+    padding: 0 16px;
+    top: 10px;
+  }
+  .search {
+    width: 170px;
+  }
+}
+@media (max-width: 620px) {
+  .topbar {
+    margin: 8px 10px 0;
+    padding: 0 12px;
+    top: 8px;
+    border-radius: 13px;
+    gap: 10px;
+  }
+  .topbar h1 {
+    font-size: 18px;
+  }
+  .topbar-right {
+    gap: 12px;
+  }
+  .search {
+    display: none;
+  }
+  .content {
+    padding: 20px 14px;
+  }
+}
+
+/* ---- Modal / retry popup ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 32, 29, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  padding: 20px;
+  animation: fade 0.2s ease both;
+}
+.modal {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 28px 26px 22px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(22, 32, 29, 0.25);
+  animation: pop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+.modal-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--rose-soft);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+}
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+}
+.modal-message {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin: 8px 0 20px;
+  line-height: 1.5;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.modal-actions .btn {
+  min-width: 96px;
+}
+
+/* ---- Form fields (profile edit) ---- */
+.field {
+  margin-bottom: 14px;
+  flex: 1;
+  min-width: 0;
+}
+.field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.field-control {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--surface);
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.field-control:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-soft);
+}
+.field-locked,
+.field-control:disabled {
+  background: var(--bg);
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+.field-hint {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin-top: 5px;
+}
+.field-row {
+  display: flex;
+  gap: 14px;
+}
+@media (max-width: 640px) {
+  .field-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+/* ---- Profile hero ---- */
+.profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: linear-gradient(120deg, var(--teal-soft) 0%, var(--surface) 60%);
+}
+.profile-avatar {
+  width: 76px !important;
+  height: 76px !important;
+  font-size: 27px !important;
+  border: 3px solid #fff;
+  box-shadow: var(--shadow);
+  flex-shrink: 0;
+}
+
+/* ---- Toast ---- */
+.toast {
+  position: fixed;
+  top: 80px;
+  right: 32px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-bg);
+  color: var(--panel-ink);
+  padding: 11px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(22, 32, 29, 0.25);
+  animation: pop 0.25s ease both;
+}
+
+/* Inverted (dark) panels like the live-clock card — themed in both modes. */
+.panel-invert {
+  background: var(--panel-bg);
+  color: var(--panel-ink);
+  border: none;
+}
+
+/* ---- Theme switcher (topbar + profile) ---- */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.theme-toggle:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+.swatches {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--line);
+  display: grid;
+  place-items: center;
+  transition:
+    transform 0.12s,
+    border-color 0.15s;
+}
+.swatch:hover {
+  transform: scale(1.08);
+}
+.swatch.active {
+  border-color: var(--ink);
+}
+.mode-seg {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  gap: 3px;
+}
+.mode-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink-soft);
+  padding: 7px 14px;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+.mode-seg button.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.swatch-custom {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ---- Profile hover dropdown (header) ---- */
+.profile-menu {
+  position: relative;
+}
+.profile-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 256px;
+  max-width: 78vw;
+  padding: 14px;
+  border-radius: 14px;
+  /* same glassmorphism family as the floating header */
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  box-shadow: 0 14px 38px rgba(22, 32, 29, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px) scale(0.98);
+  transform-origin: top right;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    visibility 0.18s;
+  z-index: 40;
+}
+/* invisible bridge so the cursor can cross the gap without closing */
+.profile-dropdown::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -14px;
+  height: 14px;
+}
+.profile-menu:hover .profile-dropdown,
+.profile-menu:focus-within .profile-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+.profile-dropdown-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.pd-name {
+  font-weight: 600;
+  font-size: 14.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pd-role {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.profile-dropdown-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  padding: 5px 2px;
+}
+.pd-ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-dropdown-sep {
+  height: 1px;
+  background: var(--line);
+  margin: 10px 0;
+}
+.profile-dropdown-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.profile-dropdown-link:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.profile-dropdown-link.danger {
+  color: var(--rose);
+}
+
+/* ---- Settings page ---- */
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  position: sticky;
+  bottom: 14px;
+}
+.settings-pointer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+.settings-pointer:hover {
+  border-color: color-mix(in srgb, var(--teal) 40%, var(--line));
+  transform: translateY(-1px);
+}
+.bg-preview {
+  width: 120px;
+  height: 68px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background-color: var(--bg);
+  background-size: cover;
+  background-position: center;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 620px) {
+  .profile-trigger-text {
+    display: none;
+  }
+}
+
+/* ======================================================================
+   Responsive layout — sidebar drawer + stacking
+   Targets: 1024 (small laptop), 768 (tablet), 425 (phone)
+   ====================================================================== */
+
+/* ---- Sidebar becomes a slide-out drawer below the tablet breakpoint ---- */
+@media (max-width: 900px) {
+  .menu-btn {
+    display: inline-flex;
+  }
+  .drawer-close {
+    display: inline-flex;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 270px;
+    max-width: 82vw;
+    z-index: 70;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.4);
+    overflow-y: auto;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 16, 14, 0.5);
+    z-index: 65;
+    animation: fade 0.2s ease both;
+  }
+}
+
+/* ---- Tablet (≤768px) ---- */
+@media (max-width: 768px) {
+  .content {
+    padding: 22px 18px;
+  }
+  /* Hide the header search to free room for the title + actions. */
+  .search {
+    display: none;
+  }
+  /* Headers with an action button wrap instead of squeezing. */
+  .section-head {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  /* Keep dense tables readable; the card scrolls horizontally. */
+  .card:has(> table) table {
+    min-width: 620px;
+  }
+}
+
+/* ---- Phone (≤480px, covers 425) ---- */
+@media (max-width: 480px) {
+  .content {
+    padding: 18px 12px;
+  }
+  /* Everything goes single-column on a phone. */
+  .cols-4,
+  .cols-3,
+  .cols-2 {
+    grid-template-columns: 1fr;
+  }
+  .grid {
+    gap: 14px;
+  }
+  /* Profile banner stacks and centres. */
+  .profile-hero {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+  /* Employee directory search drops below the chips, full width. */
+  .filters {
+    gap: 8px;
+  }
+  .filters input {
+    margin-left: 0 !important;
+    width: 100%;
+    min-width: 0 !important;
+  }
+  /* Smaller display numerals so big values don't overflow. */
+  .stat-value {
+    font-size: 28px;
+  }
+  .topbar h1 {
+    font-size: 17px;
+  }
+  /* Sticky settings action bar wraps its buttons. */
+  .settings-actions {
+    flex-wrap: wrap;
+  }
+  .settings-actions .btn {
+    flex: 1;
+  }
+  .settings-actions .btn:last-child {
+    margin-left: 0 !important;
+  }
+  /* Toast spans the width with a margin instead of a fixed right offset. */
+  .toast {
+    right: 12px;
+    left: 12px;
+    top: 72px;
+    justify-content: center;
+  }
+}
+
+/* ======================================================================
+   LIQUID-FILL HOVER  (modelled on the reference video)
+   On hover, accent-coloured "water" rises from the bottom with a rippling
+   wavy surface and fills the element; it drains back down on mouse-out.
+   Implemented with a single ::before water layer (z-index:-1 → sits above
+   each element's own background but below its text/children, so NO markup
+   changes are needed). The wavy top is an alpha mask; the crest travels
+   sideways via mask-position while filled.
+   Applied ONLY to: .btn · .theme-toggle · .topbar · .stat-card · .panel-invert
+   ====================================================================== */
+
+/* Each target must form its own stacking context so the water stays put. */
+.btn,
+.theme-toggle,
+.card.stat-card,
+.card.panel-invert {
+  position: relative;
+  isolation: isolate;
+}
+/* .topbar already establishes a context (position:sticky + z-index), so it
+   only needs isolation to keep the water layer contained. */
+.topbar {
+  isolation: isolate;
+}
+
+/* The water layer — idle (height:0) until hover. */
+.btn::before,
+.theme-toggle::before,
+.topbar::before,
+.card.stat-card::before,
+.card.panel-invert::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0; /* empty at rest */
+  z-index: -1; /* above the element's bg, below its content */
+  background: var(--wfx, var(--teal));
+  border-radius: inherit;
+  pointer-events: none;
+  /* Wavy crest tile on top + solid body below = a water shape with a rippled
+     surface. The two mask layers union by default. */
+  -webkit-mask:
+    var(--wfx-wave) repeat-x left top / 130px 16px,
+    linear-gradient(#000, #000) no-repeat left bottom / 100% calc(100% - 13px);
+  mask:
+    var(--wfx-wave) repeat-x left top / 130px 16px,
+    linear-gradient(#000, #000) no-repeat left bottom / 100% calc(100% - 13px);
+  transition: height 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Fill up + run the surface ripple. Keyboard focus fills too (accessibility). */
+.btn:hover::before,
+.btn:focus-visible::before,
+.theme-toggle:hover::before,
+.theme-toggle:focus-visible::before,
+.topbar:hover::before,
+.card.stat-card:hover::before,
+.card.panel-invert:hover::before {
+  height: 100%;
+  animation: wfx-wave 1.3s linear infinite;
+}
+
+/* The crest layer slides one tile (130px) for a seamless travelling ripple. */
+@keyframes wfx-wave {
+  to {
+    -webkit-mask-position: 130px top, left bottom;
+    mask-position: 130px top, left bottom;
+  }
+}
+
+/* ---- Per-element water colour + content treatment ---- */
+
+/* Buttons: solid accent fill, label turns crisp white. */
+.btn {
+  --wfx: var(--teal);
+}
+.btn.primary {
+  /* darker shade so the rise reads against the already-teal base */
+  --wfx: color-mix(in srgb, var(--teal) 70%, #000);
+}
+.btn:hover,
+.btn:focus-visible {
+  color: #fff;
+}
+
+/* Theme toggle: same accent fill, icon turns white. */
+.theme-toggle {
+  --wfx: var(--teal);
+}
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  color: #fff;
+  border-color: var(--teal);
+}
+
+/* Topbar: gentle translucent wash so the title/avatar stay readable. */
+.topbar {
+  --wfx: color-mix(in srgb, var(--teal) 20%, transparent);
+}
+
+/* Stat cards: soft accent wash + the existing lift; text stays legible. */
+.card.stat-card {
+  --wfx: color-mix(in srgb, var(--teal) 26%, transparent);
+}
+
+/* Inverted (dark) live-clock panel: richer wash, white text stays readable. */
+.card.panel-invert {
+  --wfx: color-mix(in srgb, var(--teal) 50%, transparent);
+}
+
+/* Visible keyboard-focus rings on the interactive targets. */
+.btn:focus-visible,
+.theme-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--teal) 75%, var(--ink));
+  outline-offset: 2px;
+}
+
+/* Reduced motion: keep a quick fill, drop the ripple animation. */
+@media (prefers-reduced-motion: reduce) {
+  .btn::before,
+  .theme-toggle::before,
+  .topbar::before,
+  .card.stat-card::before,
+  .card.panel-invert::before {
+    transition-duration: 0.3s;
+  }
+  .btn:hover::before,
+  .btn:focus-visible::before,
+  .theme-toggle:hover::before,
+  .theme-toggle:focus-visible::before,
+  .topbar:hover::before,
+  .card.stat-card:hover::before,
+  .card.panel-invert:hover::before {
+    animation: none;
+  }
+}
