@@ -13,6 +13,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Lock CORS to your GitHub Pages origin (scheme + host, no path/trailing slash).
+      - key: CORS_ORIGIN
+        value: https://aryanjaiswalitg.github.io
       # JWT signing secret — Render generates a strong random value once.
       - key: JWT_SECRET
         generateValue: true

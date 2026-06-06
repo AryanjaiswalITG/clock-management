@@ -11,8 +11,20 @@ import { todayRecord, isClockedIn, summarize } from "./attendance.js";
 
 const db = load();
 const app = express();
-// Allow the dev origin to send/receive the auth cookie.
-app.use(cors({ origin: true, credentials: true }));
+// CORS: allow the frontend origin(s) to send credentials cross-origin.
+// Set CORS_ORIGIN on Render to your GitHub Pages origin (scheme + host, NO path),
+// e.g. "https://aryanjaiswalitg.github.io". Comma-separate for multiple origins.
+// If unset, any origin is reflected (convenient for local dev).
+const allowedOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(
+  cors({
+    origin: allowedOrigins.length ? allowedOrigins : true,
+    credentials: true,
+  })
+);
 app.use(cookieParser());
 app.use(express.json({ limit: "6mb" })); // headroom for base64 profile images
 

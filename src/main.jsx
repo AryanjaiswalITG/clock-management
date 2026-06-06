@@ -11,7 +11,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>
       <SettingsProvider>
-        <BrowserRouter>
+        {/* basename = Vite base ("/clock-management/") so routes resolve under
+            the GitHub Pages subpath instead of the domain root. */}
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
           <AuthProvider>
             <App />
           </AuthProvider>
