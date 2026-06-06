@@ -16,12 +16,16 @@ export function signToken(employee) {
 }
 
 // Set / clear the httpOnly session cookie.
-// secure:false because the demo runs over http on localhost — set true behind HTTPS.
+// In production (HTTPS, frontend on a different origin than the API) a cookie
+// must be SameSite=None + Secure to be sent cross-site. Locally over http we
+// fall back to Lax/insecure. Auth also works via the Bearer token in
+// localStorage, so the app still works even where third-party cookies are blocked.
+const PROD = process.env.NODE_ENV === "production";
 export function setAuthCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: false,
+    sameSite: PROD ? "none" : "lax",
+    secure: PROD,
     maxAge: COOKIE_MAX_AGE,
     path: "/",
   });

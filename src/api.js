@@ -3,6 +3,16 @@
 
 const TOKEN_KEY = "nw_token";
 
+// Where API requests go:
+//  - Production (GitHub Pages): set VITE_API_URL to the deployed backend, e.g.
+//    "https://clock-management-api.onrender.com/api" (see .env.production).
+//    GitHub Pages can't run the Express server, so it must point off-site.
+//  - Dev: leave VITE_API_URL unset; requests go to "<base>/api" which Vite
+//    proxies to localhost:4000 (see vite.config.js). BASE_URL ends with a slash.
+const API_PREFIX =
+  import.meta.env.VITE_API_URL?.replace(/\/+$/, "") ||
+  `${import.meta.env.BASE_URL}api`.replace(/\/+/g, "/");
+
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
@@ -25,7 +35,7 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
 
   let res;
   try {
-    res = await fetch(`/api${path}`, {
+    res = await fetch(`${API_PREFIX}${path}`, {
       method,
       headers,
       credentials: "include", // send/receive the httpOnly session cookie

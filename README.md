@@ -45,8 +45,9 @@ npm start
 npm install
 npm run dev
 ```
-Open the URL Vite prints (http://localhost:5173). The frontend proxies `/api/*`
-to the backend automatically.
+Open the URL Vite prints (http://localhost:5173/clock-management/). The app is
+served under the `/clock-management/` base path, and the frontend proxies
+`/clock-management/api/*` to the backend automatically.
 
 ## Demo accounts
 
