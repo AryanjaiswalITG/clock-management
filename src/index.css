@@ -4,9 +4,9 @@
   --bg: #f4f6f5;
   --surface: #ffffff;
   --ink: #16201d;
-  --ink-soft: #5a6b65;
+  --ink-soft: #174032;
   --line: #e4e9e7;
-  --teal: #0f6e63; /* accent — overridden at runtime by ThemeContext */
+  --teal: #73ecde; /* accent — overridden at runtime by ThemeContext */
   --amber: #d98a2b;
   --rose: #c2484d;
   --green: #2f8f5b;
@@ -222,7 +222,7 @@ a {
     color 0.15s;
 }
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.382);
   color: #fff;
 }
 .nav-item.active {
@@ -760,7 +760,7 @@ tr:last-child td {
 }
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 30px rgba(22, 32, 29, 0.12);
+  box-shadow: 0 14px 30px rgba(81, 137, 120, 0.12);
 }
 .stat-card .stat-icon {
   background: color-mix(in srgb, var(--teal) 22%, var(--surface)) !important;
@@ -1350,7 +1350,7 @@ tr:last-child td {
      surface. The two mask layers union by default. */
   -webkit-mask:
     var(--wfx-wave) repeat-x left top / 130px 16px,
-    linear-gradient(#000, #000) no-repeat left bottom / 100% calc(100% - 13px);
+    linear-gradient(#4d4b4ba0, #6f6c6c) no-repeat left bottom / 100% calc(100% - 13px);
   mask:
     var(--wfx-wave) repeat-x left top / 130px 16px,
     linear-gradient(#000, #000) no-repeat left bottom / 100% calc(100% - 13px);
@@ -1362,11 +1362,11 @@ tr:last-child td {
 .btn:focus-visible::before,
 .theme-toggle:hover::before,
 .theme-toggle:focus-visible::before,
-.topbar:hover::before,
+.topbar::before,
 .card.stat-card:hover::before,
 .card.panel-invert:hover::before {
   height: 100%;
-  animation: wfx-wave 1.3s linear infinite;
+  animation: wfx-wave 2.3s linear infinite;
 }
 
 /* The crest layer slides one tile (130px) for a seamless travelling ripple. */
@@ -1389,7 +1389,7 @@ tr:last-child td {
 }
 .btn:hover,
 .btn:focus-visible {
-  color: #fff;
+  color: #ffffffc8;
 }
 
 /* Theme toggle: same accent fill, icon turns white. */
@@ -1414,7 +1414,7 @@ tr:last-child td {
 
 /* Inverted (dark) live-clock panel: richer wash, white text stays readable. */
 .card.panel-invert {
-  --wfx: color-mix(in srgb, var(--teal) 50%, transparent);
+  --wfx: color-mix(in srgb, var(--teal) 25%, transparent);
 }
 
 /* Visible keyboard-focus rings on the interactive targets. */
