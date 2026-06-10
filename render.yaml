@@ -1,21 +1,22 @@
-# Render Blueprint for the backend API.
-# In Render: New + -> Blueprint -> connect this repo. Render reads this file,
-# builds the service in ./server, and exposes it over HTTPS.
+# Render Blueprint — single web service that serves BOTH the React frontend
+# and the Express API from one origin.
+#
+# In Render: New + -> Blueprint -> connect this repo -> Apply.
+# Render builds the frontend (vite build -> ./dist), installs the server deps,
+# then starts the server, which serves ./dist and the /api routes together.
 services:
   - type: web
-    name: clock-management-api
+    name: clock-management
     runtime: node
-    rootDir: server
     plan: free
-    buildCommand: npm install
-    startCommand: npm start
+    # Build the frontend, then install backend deps.
+    buildCommand: npm install && npm run build && npm install --prefix server
+    # Start the Express server (it serves ../dist and /api).
+    startCommand: node server/index.js
     healthCheckPath: /api/settings
     envVars:
       - key: NODE_ENV
         value: production
-      # Lock CORS to your GitHub Pages origin (scheme + host, no path/trailing slash).
-      - key: CORS_ORIGIN
-        value: https://aryanjaiswalitg.github.io
       # JWT signing secret — Render generates a strong random value once.
       - key: JWT_SECRET
         generateValue: true

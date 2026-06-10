@@ -4,6 +4,8 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import bcrypt from "bcryptjs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import { load, save, DEFAULT_PASSWORD, dateKey } from "./db.js";
 import { signToken, requireAuth, requireAdmin, setAuthCookie, clearAuthCookie } from "./auth.js";
@@ -320,6 +322,18 @@ app.patch("/api/leaves/:id", requireAuth, requireAdmin, (req, res) => {
   leave.status = status;
   save();
   res.json(leave);
+});
+
+// ---- Serve the built frontend (single-origin deploy) -----------------------
+// In production the Vite build output (../dist) is served by this same server,
+// so the app and its API share one origin. Any non-API route returns index.html
+// so client-side (React Router) routes work on refresh / deep links.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distPath = path.join(__dirname, "..", "dist");
+app.use(express.static(distPath));
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api/")) return next(); // let unknown API routes 404
+  res.sendFile(path.join(distPath, "index.html"));
 });
 
 const PORT = process.env.PORT || 4000;
