@@ -3,6 +3,14 @@
 A full-stack HRMS with **role-based login**. Employees track their own work day;
 admins (HR) manage the whole org.
 
+## 🔗 Live demo
+
+**https://clock-management.onrender.com** — *(confirm your exact URL on the Render dashboard after deploying; it follows the service name)*
+
+> Hosted on Render's free tier: the **first request after idle can take ~30s** while
+> the service wakes up. Create your own account on the **Sign up** screen, or use the
+> seeded demo login below.
+
 ## What's inside
 
 **Frontend** (React + Vite) and **Backend** (Node + Express) with real JWT auth.
@@ -45,19 +53,36 @@ npm start
 npm install
 npm run dev
 ```
-Open the URL Vite prints (http://localhost:5173/clock-management/). The app is
-served under the `/clock-management/` base path, and the frontend proxies
-`/clock-management/api/*` to the backend automatically.
+Open the URL Vite prints (http://localhost:5173). In dev the frontend proxies
+`/api/*` to the backend on port 4000 automatically (see `vite.config.js`).
+
+## Deploy (single-origin, one URL)
+
+The Express server serves the built React app **and** the `/api` routes from one
+origin, so the whole app deploys as a single web service — no CORS, no separate
+frontend host.
+
+1. Push to GitHub (already done for this repo).
+2. On [Render](https://dashboard.render.com): **New + → Blueprint →** select this
+   repo **→ Apply**. Render reads [`render.yaml`](render.yaml), which:
+   - builds the frontend (`npm run build` → `dist/`),
+   - installs the server deps, and
+   - starts `node server/index.js` (serves `dist/` + `/api`).
+3. Render sets `NODE_ENV=production` and generates a `JWT_SECRET` automatically.
+4. Open the URL Render gives you — that's your shareable link.
+
+> Free tier notes: the service sleeps after ~15 min idle (~30s cold start), and
+> the disk is ephemeral, so seeded/created data resets on each redeploy.
 
 ## Demo accounts
 
-Every account uses the password **`password123`**.
+A fresh deploy seeds **one** account (the full directory lives in `server/data.json`,
+which is gitignored). New visitors can **register their own account** from the
+**Sign up** screen.
 
-| Email | Role |
-|-------|------|
-| `meera@northwind.co` | Admin (HR) |
-| `diya@northwind.co` | Employee |
-| `aarav@northwind.co`, `kabir@northwind.co`, `ishaan@northwind.co`, `ananya@northwind.co`, `rohan@northwind.co`, `sara@northwind.co` | Employee |
+| Email | Password | Role |
+|-------|----------|------|
+| `aryanjaiswal@demo.do` | `password123` | Employee |
 
 ## Stack
 React 19, Vite, React Router, Recharts, lucide-react · Express, jsonwebtoken, bcryptjs.
