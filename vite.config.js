@@ -1,16 +1,15 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  // GitHub Pages serves this repo under /clock-management/.
-  base: '/clock-management/',
+  // Vercel serves the app at the domain root, so assets live at "/...".
+  base: '/',
   server: {
     proxy: {
-      // Dev only: when running the real Express server on :4000, proxy the API.
-      // (The GitHub Pages build uses an in-browser mock instead — see src/mockApi.js.)
-      '/clock-management/api': {
+      // Dev only: proxy the API to the local Express server on :4000.
+      // (The deployed build uses the in-browser mock — see src/mockApi.js.)
+      '/api': {
         target: 'http://localhost:4000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/clock-management/, ''),
       },
     },
   },
