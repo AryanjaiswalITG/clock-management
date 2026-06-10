@@ -1,17 +1,13 @@
-// Thin fetch wrapper around the backend API.
-// In dev, Vite proxies /api -> http://localhost:4000 (see vite.config.js).
+// API layer. Two backends:
+//  - Real Express server (local dev): fetch to "<base>/api", which Vite proxies
+//    to localhost:4000 (see vite.config.js).
+//  - In-browser mock (GitHub Pages, server-less): when VITE_USE_MOCK="true",
+//    requests are served from localStorage instead (see src/mockApi.js).
+import { createMockApi } from "./mockApi";
 
 const TOKEN_KEY = "nw_token";
 
-// Where API requests go:
-//  - Production (GitHub Pages): set VITE_API_URL to the deployed backend, e.g.
-//    "https://clock-management-api.onrender.com/api" (see .env.production).
-//    GitHub Pages can't run the Express server, so it must point off-site.
-//  - Dev: leave VITE_API_URL unset; requests go to "<base>/api" which Vite
-//    proxies to localhost:4000 (see vite.config.js). BASE_URL ends with a slash.
-const API_PREFIX =
-  import.meta.env.VITE_API_URL?.replace(/\/+$/, "") ||
-  `${import.meta.env.BASE_URL}api`.replace(/\/+/g, "/");
+const API_PREFIX = `${import.meta.env.BASE_URL}api`.replace(/\/+/g, "/");
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
@@ -58,7 +54,7 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
   return data;
 }
 
-export const api = {
+const realApi = {
   login: (email, password) =>
     request("/auth/login", { method: "POST", body: { email, password }, auth: false }),
   register: (payload) =>
@@ -83,3 +79,7 @@ export const api = {
   setLeaveStatus: (id, status) =>
     request(`/leaves/${id}`, { method: "PATCH", body: { status } }),
 };
+
+// Use the in-browser mock for the server-less (GitHub Pages) build.
+export const api =
+  import.meta.env.VITE_USE_MOCK === "true" ? createMockApi(ApiError) : realApi;

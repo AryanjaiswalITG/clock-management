@@ -1,15 +1,16 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  // Served from the domain root: the Express backend hosts the built frontend
-  // and the API on a single origin (see server/index.js).
-  base: '/',
+  // GitHub Pages serves this repo under /clock-management/.
+  base: '/clock-management/',
   server: {
     proxy: {
-      // In dev the API runs separately on :4000; proxy /api there.
-      '/api': {
+      // Dev only: when running the real Express server on :4000, proxy the API.
+      // (The GitHub Pages build uses an in-browser mock instead — see src/mockApi.js.)
+      '/clock-management/api': {
         target: 'http://localhost:4000',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/clock-management/, ''),
       },
     },
   },
