@@ -67,6 +67,9 @@ const realApi = {
   updateProfile: (payload) => request("/me", { method: "PATCH", body: payload }),
   departments: () => request("/departments"),
   employees: () => request("/employees"),
+  deletedEmployees: () => request("/employees/deleted"),
+  createEmployee: (payload) => request("/employees", { method: "POST", body: payload }),
+  deleteEmployee: (id) => request(`/employees/${id}`, { method: "DELETE" }),
 
   myAttendance: () => request("/attendance/me"),
   clockIn: () => request("/attendance/clock-in", { method: "POST" }),

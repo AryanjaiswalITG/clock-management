@@ -108,3 +108,18 @@ CREATE TABLE IF NOT EXISTS monthly_summary (
   working_days INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (employee_id, year, month)
 );
+
+-- ---- Archive of admin-removed employees ("Old Employees") ------------------
+
+CREATE TABLE IF NOT EXISTS deleted_employees (
+  archive_id  BIGSERIAL PRIMARY KEY,
+  employee_id INTEGER,
+  name        TEXT NOT NULL,
+  designation TEXT,
+  dept_id     INTEGER,
+  email       TEXT,
+  avatar      TEXT,
+  role        TEXT,
+  added_at    DATE,
+  deleted_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

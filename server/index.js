@@ -243,6 +243,57 @@ app.get("/api/employees", requireAuth, requireAdmin, (req, res) => {
   res.json(db.employees.map(publicEmployee));
 });
 
+// Archive of admin-removed employees (with added/deleted dates) — admins only.
+app.get("/api/employees/deleted", requireAuth, requireAdmin, (req, res) => {
+  res.json(db.deletedEmployees || []);
+});
+
+// Admin creates an employee (same fields as signup). Does NOT change the
+// admin's own session (unlike /auth/register).
+app.post("/api/employees", requireAuth, requireAdmin, (req, res) => {
+  const { name, email, password } = req.body || {};
+  const trimmedName = String(name || "").trim();
+  const trimmedEmail = String(email || "").trim().toLowerCase();
+  if (!trimmedName) return res.status(400).json({ error: "Full name is required" });
+  if (!EMAIL_RE.test(trimmedEmail)) return res.status(400).json({ error: "Please enter a valid email address" });
+  if (!password || String(password).length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+  }
+  if (db.employees.some((e) => e.email.toLowerCase() === trimmedEmail)) {
+    return res.status(409).json({ error: "An account with this email already exists" });
+  }
+  const id = db.employees.reduce((max, e) => Math.max(max, e.id), 0) + 1;
+  const emp = {
+    id, name: trimmedName, designation: "Employee", deptId: db.departments[0]?.id ?? 1,
+    managerId: null, email: trimmedEmail, joinDate: dateKey(), status: "Active",
+    avatar: initials(trimmedName), avatarUrl: null, role: "employee",
+    targetHours: 8, halfDayCutoff: null, passwordHash: bcrypt.hashSync(String(password), 10),
+  };
+  db.employees.push(emp);
+  save();
+  res.status(201).json(publicEmployee(emp));
+});
+
+// Admin deletes an employee: archive a snapshot, remove them, and cascade
+// their attendance + leave records. Can't delete your own account.
+app.delete("/api/employees/:id", requireAuth, requireAdmin, (req, res) => {
+  const targetId = Number(req.params.id);
+  if (targetId === req.auth.sub) return res.status(403).json({ error: "You can't delete your own account" });
+  const emp = db.employees.find((e) => e.id === targetId);
+  if (!emp) return res.status(404).json({ error: "Employee not found" });
+  db.deletedEmployees = db.deletedEmployees || [];
+  db.deletedEmployees.unshift({
+    ...publicEmployee(emp),
+    addedAt: emp.joinDate,
+    deletedAt: new Date().toISOString(),
+  });
+  db.employees = db.employees.filter((e) => e.id !== targetId);
+  db.attendance = db.attendance.filter((a) => a.employeeId !== targetId);
+  db.leaves = db.leaves.filter((l) => l.employeeId !== targetId);
+  save();
+  res.json({ ok: true, id: targetId });
+});
+
 // ---- Attendance: my own ----------------------------------------------------
 
 // GET /api/attendance/me -> today's summary (worked/away/target + sessions)

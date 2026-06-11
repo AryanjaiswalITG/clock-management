@@ -11,6 +11,7 @@ export function DataProvider({ children }) {
   const [employees, setEmployees] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [attendanceToday, setAttendanceToday] = useState([]);
+  const [deletedEmployees, setDeletedEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -18,16 +19,18 @@ export function DataProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const [depts, emps, lvs, att] = await Promise.all([
+      const [depts, emps, lvs, att, del] = await Promise.all([
         api.departments(),
         api.employees(),
         api.leaves(),
         api.attendanceToday(),
+        api.deletedEmployees(),
       ]);
       setDepartments(depts);
       setEmployees(emps);
       setLeaves(lvs);
       setAttendanceToday(att);
+      setDeletedEmployees(del);
     } catch (e) {
       setError(e.message || "Failed to load data");
     } finally {
@@ -36,6 +39,19 @@ export function DataProvider({ children }) {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Admin: create one employee, then reload org data.
+  const createEmployee = useCallback(async (payload) => {
+    const emp = await api.createEmployee(payload);
+    await refresh();
+    return emp;
+  }, [refresh]);
+
+  // Admin: delete one or more employees (sequentially), then reload.
+  const deleteEmployees = useCallback(async (ids) => {
+    for (const id of ids) await api.deleteEmployee(id);
+    await refresh();
+  }, [refresh]);
 
   // Optimistic leave status change, persisted to the backend.
   const setLeaveStatus = useCallback(async (id, status) => {
@@ -57,11 +73,11 @@ export function DataProvider({ children }) {
       value: employees.filter((e) => e.deptId === d.id).length,
     }));
     return {
-      departments, employees, leaves, attendanceToday, loading, error,
-      refresh, setLeaveStatus,
+      departments, employees, leaves, attendanceToday, deletedEmployees, loading, error,
+      refresh, setLeaveStatus, createEmployee, deleteEmployees,
       deptName, empById, empName, empAvatar, headcountByDept,
     };
-  }, [departments, employees, leaves, attendanceToday, loading, error, refresh, setLeaveStatus]);
+  }, [departments, employees, leaves, attendanceToday, deletedEmployees, loading, error, refresh, setLeaveStatus, createEmployee, deleteEmployees]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

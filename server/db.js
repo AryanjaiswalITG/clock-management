@@ -25,6 +25,7 @@ function seedDatabase() {
     employees: data.employees.map((e) => ({ ...e, passwordHash: bcrypt.hashSync(DEFAULT_PASSWORD, 10) })),
     leaves: data.leaves,
     attendance: data.attendance,
+    deletedEmployees: [],
     settings: { companyName: "Northwind", weekendDays: DEFAULT_WEEKEND_DAYS, holidays: [] },
     _nextLeaveId: data._nextLeaveId,
     _seedVersion: SEED_VERSION,
@@ -42,6 +43,7 @@ export function load() {
     if (!db.settings) { db.settings = { companyName: "Northwind" }; migrated = true; }
     if (!Array.isArray(db.settings.weekendDays)) { db.settings.weekendDays = DEFAULT_WEEKEND_DAYS; migrated = true; }
     if (!Array.isArray(db.settings.holidays)) { db.settings.holidays = []; migrated = true; }
+    if (!Array.isArray(db.deletedEmployees)) { db.deletedEmployees = []; migrated = true; }
     for (const e of db.employees) {
       if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
     }

@@ -103,6 +103,30 @@ export async function createEmployee(e) {
   return rowToEmployee(r);
 }
 
+// Archive of admin-removed employees (newest first).
+export async function getDeletedEmployees() {
+  return (await query(`SELECT * FROM deleted_employees ORDER BY deleted_at DESC`)).rows.map((r) => ({
+    id: r.employee_id, name: r.name, designation: r.designation, deptId: r.dept_id,
+    email: r.email, avatar: r.avatar, role: r.role,
+    addedAt: r.added_at ? dateKey(new Date(r.added_at)) : null,
+    deletedAt: r.deleted_at.toISOString(),
+  }));
+}
+
+// Snapshot an employee into the archive, then delete them. Their sessions,
+// daily_attendance and leaves cascade away via ON DELETE CASCADE.
+export async function deleteEmployee(id) {
+  const emp = await getEmployee(id);
+  if (!emp) return null;
+  await query(
+    `INSERT INTO deleted_employees (employee_id, name, designation, dept_id, email, avatar, role, added_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [emp.id, emp.name, emp.designation, emp.deptId, emp.email, emp.avatar, emp.role, emp.joinDate]
+  );
+  await query(`DELETE FROM employees WHERE id = $1`, [id]);
+  return { ok: true, id };
+}
+
 export async function updateEmployee(id, patch) {
   const cols = {
     name: "name", designation: "designation", deptId: "dept_id", email: "email",

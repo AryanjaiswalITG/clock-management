@@ -32,6 +32,7 @@ function seedDatabase() {
     employees: data.employees.map((e) => ({ ...e, password: DEFAULT_PASSWORD })),
     leaves: data.leaves,
     attendance: data.attendance,
+    deletedEmployees: [], // archive of admin-removed employees
     settings: { companyName: "Northwind", weekendDays: DEFAULT_WEEKEND_DAYS, holidays: [] },
     _nextLeaveId: data._nextLeaveId,
     _seedVersion: SEED_VERSION,
@@ -55,6 +56,7 @@ function loadDb() {
   if (!db.settings) { db.settings = { companyName: "Northwind" }; migrated = true; }
   if (!Array.isArray(db.settings.weekendDays)) { db.settings.weekendDays = DEFAULT_WEEKEND_DAYS; migrated = true; }
   if (!Array.isArray(db.settings.holidays)) { db.settings.holidays = []; migrated = true; }
+  if (!Array.isArray(db.deletedEmployees)) { db.deletedEmployees = []; migrated = true; }
   for (const e of db.employees) {
     if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
   }
@@ -241,6 +243,66 @@ export function createMockApi(ApiError) {
       const db = loadDb();
       requireUser(db);
       return db.employees.map(publicEmployee);
+    },
+
+    // Admin creates an employee (same fields as signup). Does NOT change the
+    // admin's own session.
+    async createEmployee(payload = {}) {
+      await delay();
+      const db = loadDb();
+      const admin = requireUser(db);
+      if (admin.role !== "admin") throw new ApiError("Admins only", 403);
+      const name = String(payload.name || "").trim();
+      const email = String(payload.email || "").trim().toLowerCase();
+      const password = payload.password;
+      if (!name) throw new ApiError("Full name is required", 400);
+      if (!EMAIL_RE.test(email)) throw new ApiError("Please enter a valid email address", 400);
+      if (!password || String(password).length < 6) throw new ApiError("Password must be at least 6 characters", 400);
+      if (db.employees.some((e) => e.email.toLowerCase() === email)) {
+        throw new ApiError("An account with this email already exists", 409);
+      }
+      const id = db.employees.reduce((m, e) => Math.max(m, e.id), 0) + 1;
+      const emp = {
+        id, name, designation: "Employee", deptId: db.departments[0]?.id ?? 1,
+        managerId: null, email, joinDate: dateKey(), status: "Active",
+        avatar: initials(name), avatarUrl: null, role: "employee",
+        targetHours: 8, halfDayCutoff: null, password: String(password),
+      };
+      db.employees.push(emp);
+      saveDb(db);
+      return publicEmployee(emp);
+    },
+
+    // Archive of admin-removed employees (with added/deleted dates).
+    async deletedEmployees() {
+      await delay(40);
+      const db = loadDb();
+      requireUser(db);
+      return db.deletedEmployees || [];
+    },
+
+    // Admin deletes an employee: snapshot to archive, then remove the employee
+    // and cascade their attendance + leave records. Can't delete yourself.
+    async deleteEmployee(id) {
+      await delay();
+      const db = loadDb();
+      const admin = requireUser(db);
+      if (admin.role !== "admin") throw new ApiError("Admins only", 403);
+      const targetId = Number(id);
+      if (targetId === admin.id) throw new ApiError("You can't delete your own account", 403);
+      const emp = db.employees.find((e) => e.id === targetId);
+      if (!emp) throw new ApiError("Employee not found", 404);
+      db.deletedEmployees = db.deletedEmployees || [];
+      db.deletedEmployees.unshift({
+        ...publicEmployee(emp),
+        addedAt: emp.joinDate,
+        deletedAt: new Date().toISOString(),
+      });
+      db.employees = db.employees.filter((e) => e.id !== targetId);
+      db.attendance = db.attendance.filter((a) => a.employeeId !== targetId);
+      db.leaves = db.leaves.filter((l) => l.employeeId !== targetId);
+      saveDb(db);
+      return { ok: true, id: targetId };
     },
 
     async myAttendance() {

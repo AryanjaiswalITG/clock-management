@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, CalendarClock, CalendarRange, Plane, Wallet, Network, Search, Bell, User, LogOut, Sun, Moon, Settings as SettingsIcon, Mail, Briefcase, Menu, X } from "lucide-react";
+import { LayoutDashboard, Users, CalendarClock, CalendarRange, Plane, Wallet, Network, Search, User, LogOut, Sun, Moon, Settings as SettingsIcon, Mail, Briefcase, Menu, X } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
 import { useSettings } from "../settings/SettingsContext";
@@ -183,7 +183,6 @@ export default function Layout({ children }) {
             <button className="theme-toggle" onClick={toggleMode} title={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle theme">
               {mode === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <Bell size={20} color="var(--ink-soft)" />
 
             {/* Hover the avatar to slide open a details card */}
             <div className="profile-menu">
