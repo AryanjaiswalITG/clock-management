@@ -2,11 +2,41 @@ import { useState, useEffect, useCallback } from "react";
 import { LogIn, LogOut, Clock, Coffee, Target, CheckCircle2, AlertCircle, RotateCcw, X, CalendarRange, CalendarDays } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
-import { formatDuration, formatHMS, formatClock, formatClockSec, formatHMSColon } from "../utils/time";
+import { formatDuration, formatHMS, formatClock, formatClockSec, formatHMSColon, formatCutoff } from "../utils/time";
 import MonthCalendar from "../components/MonthCalendar";
 import MonthPicker from "../components/MonthPicker";
+import DetailDrawer from "../components/DetailDrawer";
+import Badge from "../components/Badge";
+import Avatar from "../components/Avatar";
 import { SUMMARY_ITEMS, styleFor } from "../components/attendanceStatus";
 import { useAttendanceView } from "../attendance/AttendanceViewContext";
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
+// A short human note explaining a day's status (no logic — display only).
+function statusNote(status, cutoff) {
+  switch (status) {
+    case "Present": return "Full day attended.";
+    case "Half Day": return `First check-in was after the ${formatCutoff(cutoff)} cutoff — counted as a half day.`;
+    case "Absent": return "No attendance was recorded for this working day.";
+    case "Leave": return "On approved leave.";
+    case "Weekend": return "Weekend — a non-working day.";
+    case "Holiday": return "Company holiday — a non-working day.";
+    case "Pending": return "Today — not clocked in yet.";
+    case "Upcoming": return "A future working day.";
+    default: return "";
+  }
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <div className="dd-row">
+      <span className="dd-row-label">{label}</span>
+      <span className="dd-row-value">{value}</span>
+    </div>
+  );
+}
 
 const TODAY = new Date();
 const CUR_MONTH = { year: TODAY.getFullYear(), month: TODAY.getMonth() + 1 };
@@ -64,6 +94,13 @@ export default function MyAttendance() {
   const [resetting, setResetting] = useState(false);
   const [month, setMonth] = useState(CUR_MONTH);
   const [monthly, setMonthly] = useState(null);
+  // Detail-drawer selection: { kind:"day", day } | { kind:"status", item } | null
+  const [selected, setSelected] = useState(null);
+  const [depts, setDepts] = useState([]);
+
+  // Department name for the "responsible person" block (read-only).
+  useEffect(() => { api.departments().then(setDepts).catch(() => {}); }, []);
+  const deptName = depts.find((d) => d.id === user?.deptId)?.name || "";
 
   // Tell the header to show the My Attendance / Monthly Attendance switch while
   // this page is mounted.
@@ -291,16 +328,21 @@ export default function MyAttendance() {
               {SUMMARY_ITEMS.map(({ key, status }) => {
                 const st = styleFor(status);
                 return (
-                  <div key={key} className="status-chip">
+                  <button key={key} type="button" className="status-chip clickable"
+                    onClick={() => setSelected({ kind: "status", item: { key, status } })}>
                     <div className="n" style={{ color: st.color }}>{monthly.totals[key]}</div>
                     <div className="l"><span className="month-cal-dot" style={{ position: "static", background: st.color }} /> {st.label}</div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
 
             <div style={{ marginTop: 16 }}>
-              <MonthCalendar days={monthly.days} />
+              <MonthCalendar
+                days={monthly.days}
+                onSelect={(day) => setSelected({ kind: "day", day })}
+                selectedDate={selected?.kind === "day" ? selected.day.date : null}
+              />
             </div>
 
             <div className="status-legend">
@@ -334,6 +376,78 @@ export default function MyAttendance() {
       )}
       </div>
       )}
+
+      {/* ===== Detail drawer — day / status details (single reused panel) ===== */}
+      <DetailDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected?.kind === "day" ? "Attendance details" : selected?.kind === "status" ? `${styleFor(selected.item.status).label} — summary` : ""}
+        subtitle={monthly ? `${MONTH_NAMES[monthly.month - 1]} ${monthly.year}` : ""}
+      >
+        {selected && (
+          <>
+            {/* Responsible person */}
+            <div className="dd-person">
+              <Avatar src={user.avatarUrl} initials={user.avatar} className="emp-avatar" style={{ width: 44, height: 44, fontSize: 15 }} />
+              <div style={{ minWidth: 0 }}>
+                <div className="dd-person-name">{user.name}</div>
+                <div className="dd-person-sub">{user.designation}{deptName ? ` · ${deptName}` : ""}</div>
+              </div>
+              <span className="dd-person-tag">Responsible</span>
+            </div>
+
+            {selected.kind === "day" && (() => {
+              const day = selected.day;
+              const dl = new Date(`${day.date}T00:00:00`);
+              return (
+                <>
+                  <div className="dd-status-row">
+                    <span className="dd-date">{dl.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</span>
+                    <Badge status={day.status} />
+                  </div>
+                  <div className="dd-rows">
+                    <DetailRow label="Status" value={day.status} />
+                    <DetailRow label="First clock-in" value={formatClock(day.firstIn)} />
+                    <DetailRow label="Last clock-out" value={formatClock(day.lastOut)} />
+                    <DetailRow label="Worked hours" value={day.workedSec ? formatDuration(day.workedSec) : "—"} />
+                    <DetailRow label="Daily target" value={`${user.targetHours} h`} />
+                    <DetailRow label="Half-day cutoff" value={formatCutoff(user.halfDayCutoff)} />
+                    <DetailRow label="Employee ID" value={`#${String(user.id).padStart(4, "0")}`} />
+                  </div>
+                  <div className="dd-note">{statusNote(day.status, user.halfDayCutoff)}</div>
+                </>
+              );
+            })()}
+
+            {selected.kind === "status" && (() => {
+              const { status } = selected.item;
+              const dates = (monthly?.days || []).filter((d) => d.status === status);
+              return (
+                <>
+                  <div className="dd-status-row">
+                    <span className="dd-date">{styleFor(status).label}</span>
+                    <Badge status={status} />
+                  </div>
+                  <div className="dd-rows">
+                    <DetailRow label="Days this month" value={dates.length} />
+                    <DetailRow label="Daily target" value={`${user.targetHours} h`} />
+                  </div>
+                  <div className="dd-subhead">Dates</div>
+                  <div className="dd-date-list">
+                    {dates.length === 0 && <span className="dd-empty">No days with this status.</span>}
+                    {dates.map((d) => (
+                      <span key={d.date} className="badge gray">
+                        {new Date(`${d.date}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="dd-note">{statusNote(status, user.halfDayCutoff)}</div>
+                </>
+              );
+            })()}
+          </>
+        )}
+      </DetailDrawer>
 
       {/* Reset confirmation — guards against accidental clicks. */}
       {confirmReset && (

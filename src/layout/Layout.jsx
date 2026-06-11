@@ -26,14 +26,14 @@ function AttendanceSwitch() {
       <button type="button" role="tab" aria-selected={view === "daily"}
         className={`view-tab ${view === "daily" ? "active" : ""}`} onClick={() => setView("daily")}>
         <CalendarClock size={15} />
-        <span className="vt-full">My Attendance</span><span className="vt-short">Daily</span>
+        <span className="vt-full">Daily</span><span className="vt-short">Daily</span>
       </button>
 
       <div className="attn-menu">
         <button type="button" role="tab" aria-selected={view === "monthly"} aria-haspopup="dialog"
           className={`view-tab ${view === "monthly" ? "active" : ""}`} onClick={() => setView("monthly")}>
           <CalendarRange size={15} />
-          <span className="vt-full">Monthly Attendance</span><span className="vt-short">Monthly</span>
+          <span className="vt-full">Monthly</span><span className="vt-short">Monthly</span>
         </button>
 
         <div className="attn-popup" role="dialog" aria-label="Monthly attendance summary">
