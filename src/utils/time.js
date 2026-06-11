@@ -41,6 +41,16 @@ export function formatClockSec(iso) {
   });
 }
 
+// "13:00" -> "1:00 PM"  (empty dash if not set)
+export function formatCutoff(hhmm) {
+  if (!hhmm) return "—";
+  const [h, m] = String(hhmm).split(":").map(Number);
+  if (!Number.isFinite(h)) return "—";
+  const ampm = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m || 0).padStart(2, "0")} ${ampm}`;
+}
+
 // Elapsed seconds -> strict "HH:MM:SS" (e.g. 30600 -> "08:30:00").
 // Always derived from a real duration; clamped to >= 0, hours are not capped at 24.
 export function formatHMSColon(totalSec) {

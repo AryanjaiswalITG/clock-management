@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
-import { LogIn, LogOut, Clock, Coffee, Target, CheckCircle2, AlertCircle, RotateCcw, X } from "lucide-react";
+import { LogIn, LogOut, Clock, Coffee, Target, CheckCircle2, AlertCircle, RotateCcw, X, CalendarRange, CalendarDays } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { formatDuration, formatHMS, formatClock, formatClockSec, formatHMSColon } from "../utils/time";
+import MonthCalendar from "../components/MonthCalendar";
+import MonthPicker from "../components/MonthPicker";
+import { SUMMARY_ITEMS, styleFor } from "../components/attendanceStatus";
+
+const TODAY = new Date();
+const CUR_MONTH = { year: TODAY.getFullYear(), month: TODAY.getMonth() + 1 };
 
 // Mirror of the server's summarize() so the worked/away numbers tick live
 // every second while clocked in (server stays the source of truth on each action).
@@ -52,6 +58,8 @@ export default function MyAttendance() {
   const [error, setError] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false); // reset confirmation modal
   const [resetting, setResetting] = useState(false);
+  const [month, setMonth] = useState(CUR_MONTH);
+  const [monthly, setMonthly] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -62,6 +70,15 @@ export default function MyAttendance() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load the monthly breakdown whenever the selected month changes (and after a punch).
+  const loadMonthly = useCallback(async () => {
+    try {
+      setMonthly(await api.monthlyAttendance(month));
+    } catch { /* keep previous month view on error */ }
+  }, [month]);
+
+  useEffect(() => { loadMonthly(); }, [loadMonthly]);
 
   // 1s tick so the live clock and worked timer update.
   useEffect(() => {
@@ -75,6 +92,7 @@ export default function MyAttendance() {
     try {
       const next = action === "in" ? await api.clockIn() : await api.clockOut();
       setSummary(next);
+      loadMonthly(); // today's status may have changed
     } catch (e) {
       setError(e.message);
     } finally {
@@ -88,6 +106,7 @@ export default function MyAttendance() {
     setError(null);
     try {
       setSummary(await api.resetAttendance());
+      loadMonthly();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -231,6 +250,66 @@ export default function MyAttendance() {
           </tbody>
         </table>
       </div>
+
+      {/* ---- Monthly overview ---- */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <div className="row-between" style={{ marginBottom: 4 }}>
+          <div>
+            <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><CalendarRange size={17} /> Monthly Attendance</div>
+            <div className="card-sub">Present, absent, leave, half-day, weekends & holidays</div>
+          </div>
+          <MonthPicker value={month} onChange={setMonth} max={CUR_MONTH} />
+        </div>
+
+        {!monthly ? (
+          <div style={{ color: "var(--ink-soft)", padding: "16px 0" }}>Loading month…</div>
+        ) : (
+          <>
+            <div className="status-chips" style={{ margin: "14px 0 6px" }}>
+              {SUMMARY_ITEMS.map(({ key, status }) => {
+                const st = styleFor(status);
+                return (
+                  <div key={key} className="status-chip">
+                    <div className="n" style={{ color: st.color }}>{monthly.totals[key]}</div>
+                    <div className="l"><span className="month-cal-dot" style={{ position: "static", background: st.color }} /> {st.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <MonthCalendar days={monthly.days} />
+            </div>
+
+            <div className="status-legend">
+              {SUMMARY_ITEMS.map(({ key, status }) => {
+                const st = styleFor(status);
+                return (
+                  <div key={key} className="item">
+                    <span className="swatch" style={{ background: st.color }} /> {st.label}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ---- Weekend report ---- */}
+      {monthly && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><CalendarDays size={17} /> Weekend Report</div>
+          <div className="card-sub">{monthly.weekends.length} weekend day{monthly.weekends.length === 1 ? "" : "s"} this month</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+            {monthly.weekends.length === 0 && <span style={{ fontSize: 13, color: "var(--ink-soft)" }}>No weekends configured.</span>}
+            {monthly.weekends.map((d) => (
+              <span key={d} className="badge gray">
+                {new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Reset confirmation — guards against accidental clicks. */}
       {confirmReset && (

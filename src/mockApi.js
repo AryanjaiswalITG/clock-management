@@ -4,18 +4,15 @@
 // and clearing site data resets it. Passwords are stored in plain text here
 // because there is no server boundary; do not reuse a real password.
 
+import {
+  dateKey, summarize, monthlyForEmployee, monthlyForTeam, DEFAULT_WEEKEND_DAYS,
+} from "../shared/attendance.js";
+
 const DB_KEY = "nw_mock_db";
 const TOKEN_KEY = "nw_token";
 const DEFAULT_PASSWORD = "password123";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// "YYYY-MM-DD" in local time (matches server/db.js dateKey).
-function dateKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+const CUTOFF_RE = /^([01]\d|2[0-3]):[0-5]\d$/; // "HH:MM" 24h
 
 // "Aryan Jaiswal" -> "AJ"
 function initials(name) {
@@ -39,30 +36,43 @@ function seedDatabase() {
         id: 1, name: "Aryan Jaiswal", designation: "Developer", deptId: 1,
         managerId: null, email: "aryanjaiswal@demo.do", joinDate: "2024-01-15",
         status: "Active", avatar: "AJ", avatarUrl: null, role: "employee",
-        targetHours: 8, password: DEFAULT_PASSWORD,
+        targetHours: 8, halfDayCutoff: "13:00", password: DEFAULT_PASSWORD,
       },
     ],
     leaves: [],
     attendance: [],
-    settings: { companyName: "Northwind" },
+    settings: { companyName: "Northwind", weekendDays: DEFAULT_WEEKEND_DAYS, holidays: [] },
     _nextLeaveId: 1,
   };
 }
 
 function loadDb() {
+  let db;
   try {
     const raw = localStorage.getItem(DB_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) db = JSON.parse(raw);
   } catch { /* fall through to seed */ }
-  const db = seedDatabase();
-  saveDb(db);
+  if (!db) {
+    db = seedDatabase();
+    saveDb(db);
+    return db;
+  }
+  // Migrate older saved DBs that predate newer fields.
+  let migrated = false;
+  if (!db.settings) { db.settings = { companyName: "Northwind" }; migrated = true; }
+  if (!Array.isArray(db.settings.weekendDays)) { db.settings.weekendDays = DEFAULT_WEEKEND_DAYS; migrated = true; }
+  if (!Array.isArray(db.settings.holidays)) { db.settings.holidays = []; migrated = true; }
+  for (const e of db.employees) {
+    if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
+  }
+  if (migrated) saveDb(db);
   return db;
 }
 function saveDb(db) {
   localStorage.setItem(DB_KEY, JSON.stringify(db));
 }
 
-// ---- Attendance helpers (match server/attendance.js) -----------------------
+// ---- Attendance helpers (db-aware; pure math comes from shared/) ------------
 function todayRecord(db, employeeId, { create = false } = {}) {
   const today = dateKey();
   let rec = db.attendance.find((a) => a.employeeId === employeeId && a.date === today);
@@ -74,35 +84,6 @@ function todayRecord(db, employeeId, { create = false } = {}) {
 }
 function isClockedIn(rec) {
   return !!rec && rec.sessions.some((s) => s.out === null);
-}
-function summarize(sessions, targetHours = 8, now = new Date()) {
-  const sorted = [...sessions].sort((a, b) => new Date(a.in) - new Date(b.in));
-  let workedSec = 0;
-  for (const s of sorted) {
-    const start = new Date(s.in).getTime();
-    const end = (s.out ? new Date(s.out) : now).getTime();
-    if (end > start) workedSec += Math.floor((end - start) / 1000);
-  }
-  let awaySec = 0;
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const prevOut = sorted[i].out ? new Date(sorted[i].out).getTime() : null;
-    const nextIn = new Date(sorted[i + 1].in).getTime();
-    if (prevOut && nextIn > prevOut) awaySec += Math.floor((nextIn - prevOut) / 1000);
-  }
-  const targetSec = Math.round(targetHours * 3600);
-  const clockedIn = sorted.some((s) => s.out === null);
-  const firstIn = sorted.length ? sorted[0].in : null;
-  const lastOut = clockedIn ? null : (sorted.length ? sorted[sorted.length - 1].out : null);
-  let status = "Not started";
-  if (clockedIn) status = "Working";
-  else if (sorted.length) status = "Clocked out";
-  return {
-    status, clockedIn, workedSec, awaySec, targetSec,
-    remainingSec: Math.max(0, targetSec - workedSec),
-    overtimeSec: Math.max(0, workedSec - targetSec),
-    targetMet: workedSec >= targetSec,
-    firstIn, lastOut, sessions: sorted,
-  };
 }
 
 const publicEmployee = ({ password, ...rest }) => rest;
@@ -155,7 +136,8 @@ export function createMockApi(ApiError) {
         id, name: trimmedName, designation: "Employee",
         deptId: db.departments[0]?.id ?? 1, managerId: null, email: trimmedEmail,
         joinDate: dateKey(), status: "Active", avatar: initials(trimmedName),
-        avatarUrl: null, role: "employee", targetHours: 8, password: String(password),
+        avatarUrl: null, role: "employee", targetHours: 8, halfDayCutoff: null,
+        password: String(password),
       };
       db.employees.push(emp);
       saveDb(db);
@@ -182,6 +164,20 @@ export function createMockApi(ApiError) {
         if (trimmed.length > 40) throw new ApiError("Company name is too long", 400);
         db.settings.companyName = trimmed;
       }
+      if (payload.weekendDays !== undefined) {
+        const wd = payload.weekendDays;
+        if (!Array.isArray(wd) || wd.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) {
+          throw new ApiError("weekendDays must be an array of 0–6 (Sun–Sat)", 400);
+        }
+        db.settings.weekendDays = [...new Set(wd)].sort((a, b) => a - b);
+      }
+      if (payload.holidays !== undefined) {
+        const hs = payload.holidays;
+        if (!Array.isArray(hs) || hs.some((h) => !/^\d{4}-\d{2}-\d{2}$/.test(h))) {
+          throw new ApiError("holidays must be an array of YYYY-MM-DD dates", 400);
+        }
+        db.settings.holidays = [...new Set(hs)].sort();
+      }
       saveDb(db);
       return db.settings;
     },
@@ -196,7 +192,7 @@ export function createMockApi(ApiError) {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
-      const { name, designation, email, deptId, targetHours, avatarUrl } = payload;
+      const { name, designation, email, deptId, targetHours, avatarUrl, halfDayCutoff } = payload;
       if (name !== undefined) {
         const t = String(name).trim();
         if (!t) throw new ApiError("Name cannot be empty", 400);
@@ -226,6 +222,11 @@ export function createMockApi(ApiError) {
           throw new ApiError("Daily target must be between 1 and 24 hours", 400);
         }
         emp.targetHours = n;
+      }
+      if (halfDayCutoff !== undefined) {
+        if (halfDayCutoff === null || halfDayCutoff === "") emp.halfDayCutoff = null;
+        else if (CUTOFF_RE.test(String(halfDayCutoff))) emp.halfDayCutoff = String(halfDayCutoff);
+        else throw new ApiError("Half-day cutoff must be a time like 13:00", 400);
       }
       if (avatarUrl !== undefined) {
         if (avatarUrl === null || avatarUrl === "") emp.avatarUrl = null;
@@ -302,6 +303,33 @@ export function createMockApi(ApiError) {
           workedSec: s.workedSec,
           status: s.clockedIn ? "Working" : s.sessions.length ? "Present" : "Absent",
         };
+      });
+    },
+
+    // Full month breakdown for the signed-in employee. month is 1-12.
+    async monthlyAttendance({ year, month } = {}) {
+      await delay();
+      const db = loadDb();
+      const emp = requireUser(db);
+      const now = new Date();
+      return monthlyForEmployee({
+        year: year || now.getFullYear(),
+        month: month || now.getMonth() + 1,
+        employee: emp, records: db.attendance, leaves: db.leaves, settings: db.settings,
+      });
+    },
+
+    // Per-employee totals + weekend list for the whole team (admin). month is 1-12.
+    async monthlyTeam({ year, month } = {}) {
+      await delay();
+      const db = loadDb();
+      const emp = requireUser(db);
+      if (emp.role !== "admin") throw new ApiError("Admins only", 403);
+      const now = new Date();
+      return monthlyForTeam({
+        year: year || now.getFullYear(),
+        month: month || now.getMonth() + 1,
+        employees: db.employees, records: db.attendance, leaves: db.leaves, settings: db.settings,
       });
     },
 

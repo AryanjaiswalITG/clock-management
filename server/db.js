@@ -5,12 +5,16 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
+import { dateKey, DEFAULT_WEEKEND_DAYS } from "../shared/attendance.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = path.join(__dirname, "data.json");
 
 // Default password for every seeded account (demo only).
 export const DEFAULT_PASSWORD = "password123";
+
+// Single-sourced from shared/, re-exported so `import { dateKey } from "./db.js"` still works.
+export { dateKey };
 
 const departments = [
   { id: 1, name: "Engineering" },
@@ -22,8 +26,10 @@ const departments = [
 
 // role: "admin" sees the full org dashboard, "employee" sees only their own view.
 // Single demo account.
+// halfDayCutoff: "HH:MM" local time. If set and the employee's first check-in is
+// after it, the day is auto-marked Half Day. null = no half-day rule.
 const seedEmployees = [
-  { id: 1, name: "Aryan Jaiswal", designation: "Developer", deptId: 1, managerId: null, email: "aryanjaiswal@demo.do", joinDate: "2024-01-15", status: "Active", avatar: "AJ", avatarUrl: null, role: "employee", targetHours: 8 },
+  { id: 1, name: "Aryan Jaiswal", designation: "Developer", deptId: 1, managerId: null, email: "aryanjaiswal@demo.do", joinDate: "2024-01-15", status: "Active", avatar: "AJ", avatarUrl: null, role: "employee", targetHours: 8, halfDayCutoff: "13:00" },
 ];
 
 const seedLeaves = [];
@@ -35,14 +41,6 @@ const attendanceTrend = [
   { day: "Thu", present: 7, absent: 1 },
   { day: "Fri", present: 6, absent: 2 },
 ];
-
-// "YYYY-MM-DD" for a Date in local time.
-export function dateKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 // Start each demo with a clean day — the user clocks in/out themselves.
 function seedAttendance() {
@@ -60,7 +58,7 @@ function seedDatabase() {
     leaves: seedLeaves,
     attendance: seedAttendance(),
     attendanceTrend,
-    settings: { companyName: "Northwind" },
+    settings: { companyName: "Northwind", weekendDays: DEFAULT_WEEKEND_DAYS, holidays: [] },
     _nextLeaveId: seedLeaves.length + 1,
   };
 }
@@ -71,11 +69,15 @@ export function load() {
   if (db) return db;
   if (fs.existsSync(DATA_FILE)) {
     db = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-    // Migrate older data files that predate the settings block.
-    if (!db.settings) {
-      db.settings = { companyName: "Northwind" };
-      save();
+    // Migrate older data files that predate newer fields.
+    let migrated = false;
+    if (!db.settings) { db.settings = { companyName: "Northwind" }; migrated = true; }
+    if (!Array.isArray(db.settings.weekendDays)) { db.settings.weekendDays = DEFAULT_WEEKEND_DAYS; migrated = true; }
+    if (!Array.isArray(db.settings.holidays)) { db.settings.holidays = []; migrated = true; }
+    for (const e of db.employees) {
+      if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
     }
+    if (migrated) save();
   } else {
     db = seedDatabase();
     save();

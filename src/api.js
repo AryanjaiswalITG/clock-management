@@ -73,6 +73,10 @@ const realApi = {
   clockOut: () => request("/attendance/clock-out", { method: "POST" }),
   resetAttendance: () => request("/attendance/reset", { method: "POST" }),
   attendanceToday: () => request("/attendance/today"),
+  monthlyAttendance: ({ year, month } = {}) =>
+    request(`/attendance/monthly?year=${year}&month=${month}`),
+  monthlyTeam: ({ year, month } = {}) =>
+    request(`/attendance/monthly/team?year=${year}&month=${month}`),
 
   leaves: () => request("/leaves"),
   applyLeave: (payload) => request("/leaves", { method: "POST", body: payload }),

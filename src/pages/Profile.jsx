@@ -6,6 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useSettings } from "../settings/SettingsContext";
 import Avatar from "../components/Avatar";
 import Badge from "../components/Badge";
+import { formatCutoff as fmtCutoff } from "../utils/time";
 
 const MAX_PHOTO_BYTES = 3.5 * 1024 * 1024;
 
@@ -97,6 +98,7 @@ export default function Profile() {
       email: user.email,
       deptId: user.deptId,
       targetHours: user.targetHours,
+      halfDayCutoff: user.halfDayCutoff || "",
       companyName,
     });
     setError(null);
@@ -122,6 +124,7 @@ export default function Profile() {
         email: form.email,
         deptId: Number(form.deptId),
         targetHours: Number(form.targetHours),
+        halfDayCutoff: form.halfDayCutoff || null,
       });
       updateUser(updated);     // refresh sidebar/topbar + everywhere
       // Company name is an org-level setting — save it if it changed.
@@ -237,6 +240,18 @@ export default function Profile() {
             </div>
           </div>
 
+          <div className="field-row">
+            <div className="field">
+              <label className="field-label">Half-day cutoff time</label>
+              <input className="field-control" type="time" value={form.halfDayCutoff} onChange={set("halfDayCutoff")} />
+              <div className="field-hint">
+                If you first clock in after this time, the day is auto-marked <b>Half Day</b>.
+                Leave empty to disable.
+              </div>
+            </div>
+            <div className="field" />
+          </div>
+
           {/* Locked fields, shown for context */}
           <div className="field-row" style={{ marginTop: 4 }}>
             <div className="field">
@@ -267,6 +282,7 @@ export default function Profile() {
           <ViewRow icon={Mail} label="Email" value={user.email} />
           <ViewRow icon={Building2} label="Department" value={deptName} />
           <ViewRow icon={Clock} label="Daily target" value={`${user.targetHours} hours`} />
+          <ViewRow icon={Clock} label="Half-day cutoff" value={fmtCutoff(user.halfDayCutoff)} />
           <ViewRow icon={Shield} label="Role" value={<span style={{ textTransform: "capitalize" }}>{user.role}</span>} locked />
           <ViewRow icon={CalendarDays} label="Joined" value={joined} locked />
           <div className="row-between" style={{ padding: "14px 0 0" }}>

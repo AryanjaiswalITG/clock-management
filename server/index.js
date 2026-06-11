@@ -10,6 +10,7 @@ import { fileURLToPath } from "url";
 import { load, save, DEFAULT_PASSWORD, dateKey } from "./db.js";
 import { signToken, requireAuth, requireAdmin, setAuthCookie, clearAuthCookie } from "./auth.js";
 import { todayRecord, isClockedIn, summarize } from "./attendance.js";
+import { monthlyForEmployee, monthlyForTeam } from "../shared/attendance.js";
 
 const db = load();
 const app = express();
@@ -93,6 +94,7 @@ app.post("/api/auth/register", (req, res) => {
     avatarUrl: null,
     role: "employee",
     targetHours: 8,
+    halfDayCutoff: null,
     passwordHash: bcrypt.hashSync(String(password), 10),
   };
   db.employees.push(emp);
@@ -123,14 +125,26 @@ app.get("/api/settings", (req, res) => {
   res.json(db.settings);
 });
 
-// Update the company name (any authenticated user, for this demo).
+// Update org settings: company name + attendance policy (weekend days, holidays).
 app.patch("/api/settings", requireAuth, (req, res) => {
-  const { companyName } = req.body || {};
+  const { companyName, weekendDays, holidays } = req.body || {};
   if (companyName !== undefined) {
     const trimmed = String(companyName).trim();
     if (!trimmed) return res.status(400).json({ error: "Company name cannot be empty" });
     if (trimmed.length > 40) return res.status(400).json({ error: "Company name is too long" });
     db.settings.companyName = trimmed;
+  }
+  if (weekendDays !== undefined) {
+    if (!Array.isArray(weekendDays) || weekendDays.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) {
+      return res.status(400).json({ error: "weekendDays must be an array of 0–6 (Sun–Sat)" });
+    }
+    db.settings.weekendDays = [...new Set(weekendDays)].sort((a, b) => a - b);
+  }
+  if (holidays !== undefined) {
+    if (!Array.isArray(holidays) || holidays.some((h) => !/^\d{4}-\d{2}-\d{2}$/.test(h))) {
+      return res.status(400).json({ error: "holidays must be an array of YYYY-MM-DD dates" });
+    }
+    db.settings.holidays = [...new Set(holidays)].sort();
   }
   save();
   res.json(db.settings);
@@ -149,7 +163,7 @@ app.get("/api/me", requireAuth, (req, res) => {
 app.patch("/api/me", requireAuth, (req, res) => {
   const emp = findEmployee(req.auth.sub);
   if (!emp) return res.status(404).json({ error: "User not found" });
-  const { name, designation, email, deptId, targetHours, avatarUrl } = req.body || {};
+  const { name, designation, email, deptId, targetHours, avatarUrl, halfDayCutoff } = req.body || {};
 
   if (name !== undefined) {
     const trimmed = String(name).trim();
@@ -186,6 +200,17 @@ app.patch("/api/me", requireAuth, (req, res) => {
       return res.status(400).json({ error: "Daily target must be between 1 and 24 hours" });
     }
     emp.targetHours = t;
+  }
+
+  // Half-day cutoff: "HH:MM" (24h) or null/"" to clear the rule.
+  if (halfDayCutoff !== undefined) {
+    if (halfDayCutoff === null || halfDayCutoff === "") {
+      emp.halfDayCutoff = null;
+    } else if (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(halfDayCutoff))) {
+      emp.halfDayCutoff = String(halfDayCutoff);
+    } else {
+      return res.status(400).json({ error: "Half-day cutoff must be a time like 13:00" });
+    }
   }
 
   // Profile photo: a data:image URL, or null to remove it.
@@ -280,6 +305,36 @@ app.get("/api/attendance/today", requireAuth, requireAdmin, (req, res) => {
     };
   });
   res.json(rows);
+});
+
+// ---- Monthly attendance (Present/Absent/Leave/Half-Day/Weekend/Holiday) ----
+
+// Parse ?year=&month= (month 1-12), defaulting to the current month.
+function parseMonth(req) {
+  const now = new Date();
+  const year = Number(req.query.year) || now.getFullYear();
+  const month = Number(req.query.month) || now.getMonth() + 1;
+  return { year, month: Math.min(12, Math.max(1, month)) };
+}
+
+// GET /api/attendance/monthly -> the signed-in employee's full month breakdown.
+app.get("/api/attendance/monthly", requireAuth, (req, res) => {
+  const emp = findEmployee(req.auth.sub);
+  if (!emp) return res.status(404).json({ error: "User not found" });
+  const { year, month } = parseMonth(req);
+  res.json(monthlyForEmployee({
+    year, month, employee: emp,
+    records: db.attendance, leaves: db.leaves, settings: db.settings,
+  }));
+});
+
+// GET /api/attendance/monthly/team -> per-employee totals + weekend list (admin).
+app.get("/api/attendance/monthly/team", requireAuth, requireAdmin, (req, res) => {
+  const { year, month } = parseMonth(req);
+  res.json(monthlyForTeam({
+    year, month, employees: db.employees,
+    records: db.attendance, leaves: db.leaves, settings: db.settings,
+  }));
 });
 
 // ---- Leaves ----------------------------------------------------------------
