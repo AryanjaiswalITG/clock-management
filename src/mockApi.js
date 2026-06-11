@@ -7,6 +7,7 @@
 import {
   dateKey, summarize, monthlyForEmployee, monthlyForTeam, DEFAULT_WEEKEND_DAYS,
 } from "../shared/attendance.js";
+import { buildDemoData, SEED_VERSION } from "../shared/demoSeed.js";
 
 const DB_KEY = "nw_mock_db";
 const TOKEN_KEY = "nw_token";
@@ -22,27 +23,18 @@ function initials(name) {
 }
 
 // ---- Seed (matches server/db.js) -------------------------------------------
+// Demo profiles/attendance/leaves come from shared/demoSeed.js; the mock stores
+// plaintext passwords (no server boundary). password = "password123" for all.
 function seedDatabase() {
+  const data = buildDemoData(new Date());
   return {
-    departments: [
-      { id: 1, name: "Engineering" },
-      { id: 2, name: "Product" },
-      { id: 3, name: "People & HR" },
-      { id: 4, name: "Sales" },
-      { id: 5, name: "Finance" },
-    ],
-    employees: [
-      {
-        id: 1, name: "Aryan Jaiswal", designation: "Developer", deptId: 1,
-        managerId: null, email: "aryanjaiswal@demo.do", joinDate: "2024-01-15",
-        status: "Active", avatar: "AJ", avatarUrl: null, role: "employee",
-        targetHours: 8, halfDayCutoff: "13:00", password: DEFAULT_PASSWORD,
-      },
-    ],
-    leaves: [],
-    attendance: [],
+    departments: data.departments,
+    employees: data.employees.map((e) => ({ ...e, password: DEFAULT_PASSWORD })),
+    leaves: data.leaves,
+    attendance: data.attendance,
     settings: { companyName: "Northwind", weekendDays: DEFAULT_WEEKEND_DAYS, holidays: [] },
-    _nextLeaveId: 1,
+    _nextLeaveId: data._nextLeaveId,
+    _seedVersion: SEED_VERSION,
   };
 }
 
@@ -52,12 +44,13 @@ function loadDb() {
     const raw = localStorage.getItem(DB_KEY);
     if (raw) db = JSON.parse(raw);
   } catch { /* fall through to seed */ }
-  if (!db) {
+  // Fresh browser OR an older demo seed -> (re)seed with the latest demo data.
+  if (!db || (db._seedVersion || 0) < SEED_VERSION) {
     db = seedDatabase();
     saveDb(db);
     return db;
   }
-  // Migrate older saved DBs that predate newer fields.
+  // Same version: just patch any missing fields defensively.
   let migrated = false;
   if (!db.settings) { db.settings = { companyName: "Northwind" }; migrated = true; }
   if (!Array.isArray(db.settings.weekendDays)) { db.settings.weekendDays = DEFAULT_WEEKEND_DAYS; migrated = true; }

@@ -76,13 +76,19 @@ frontend host.
 
 ## Demo accounts
 
-A fresh deploy seeds **one** account (the full directory lives in `server/data.json`,
-which is gitignored). New visitors can **register their own account** from the
-**Sign up** screen.
+Every account uses the password **`password123`**. The app seeds a small demo
+org (with a month of sample attendance) so the dashboards and monthly reports
+are populated out of the box. New visitors can also **register their own account**
+from the **Sign up** screen.
 
 | Email | Password | Role |
 |-------|----------|------|
+| `admin@demo.do` | `password123` | **Admin (HR)** — full org dashboard, monthly report + charts |
 | `aryanjaiswal@demo.do` | `password123` | Employee |
+| `kabir@demo.do`, `diya@demo.do`, `rohan@demo.do`, `ananya@demo.do` | `password123` | Employee |
+
+> Sign in as **`admin@demo.do`** to see the admin Attendance → Monthly Report,
+> the status-distribution chart, and the weekend/holiday panel.
 
 ## Stack
 React 19, Vite, React Router, Recharts, lucide-react · Express, jsonwebtoken, bcryptjs.
