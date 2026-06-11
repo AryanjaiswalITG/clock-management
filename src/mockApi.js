@@ -183,6 +183,24 @@ export function createMockApi(ApiError) {
       return publicEmployee(requireUser(db));
     },
 
+    // Self-service account deletion. Archives the user and preserves their
+    // attendance/leaves (for admin history), then ends the session.
+    async deleteMe() {
+      await delay();
+      const db = loadDb();
+      const me = requireUser(db);
+      db.deletedEmployees = db.deletedEmployees || [];
+      db.deletedEmployees.unshift({
+        ...publicEmployee(me),
+        addedAt: me.joinDate,
+        deletedAt: new Date().toISOString(),
+      });
+      db.employees = db.employees.filter((e) => e.id !== me.id);
+      saveDb(db);
+      localStorage.removeItem(TOKEN_KEY); // end the session
+      return { ok: true };
+    },
+
     async updateProfile(payload = {}) {
       await delay();
       const db = loadDb();

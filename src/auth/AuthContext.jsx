@@ -50,10 +50,17 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  // Permanently delete the signed-in user's own account, then end the session.
+  const deleteAccount = useCallback(async () => {
+    await api.deleteMe();
+    clearToken();
+    setUser(null);
+  }, []);
+
   // Replace the cached user after a profile edit.
   const updateUser = useCallback((next) => setUser(next), []);
 
-  const value = { user, loading, login, register, logout, updateUser, isAdmin: user?.role === "admin" };
+  const value = { user, loading, login, register, logout, deleteAccount, updateUser, isAdmin: user?.role === "admin" };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

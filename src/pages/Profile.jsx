@@ -25,7 +25,7 @@ function ViewRow({ icon: Icon, label, value, locked }) {
 }
 
 export default function Profile() {
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser, logout, deleteAccount } = useAuth();
   const { companyName, updateCompany } = useSettings();
   const [depts, setDepts] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -35,6 +35,20 @@ export default function Profile() {
   const [flash, setFlash] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function doDeleteAccount() {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteAccount(); // user becomes null -> app redirects to /login
+    } catch (err) {
+      setError(err.message);
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
 
   function showFlash() {
     setFlash(true);
@@ -292,7 +306,12 @@ export default function Profile() {
             <span style={{ fontSize: 14, fontWeight: 500 }}>#{String(user.id).padStart(4, "0")}</span>
           </div>
 
-          <button className="btn ghost" style={{ marginTop: 20 }} onClick={logout}>Sign out</button>
+          <div style={{ display: "flex", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
+            <button className="btn ghost" onClick={logout}>Sign out</button>
+            <button className="btn danger-outline" onClick={() => setConfirmDelete(true)}>
+              <Trash2 size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} /> Delete my account
+            </button>
+          </div>
         </div>
       )}
 
@@ -305,6 +324,27 @@ export default function Profile() {
         </div>
         <ChevronRight size={18} color="var(--ink-soft)" />
       </Link>
+
+      {/* Delete-account confirmation */}
+      {confirmDelete && (
+        <div className="modal-overlay" onClick={() => !deleting && setConfirmDelete(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setConfirmDelete(false)} disabled={deleting} aria-label="Close"><X size={18} /></button>
+            <div className="modal-icon"><Trash2 size={26} color="var(--rose)" /></div>
+            <div className="modal-title">Delete your account?</div>
+            <div className="modal-message">
+              This permanently deletes your account and signs you out. Your attendance
+              history is kept for company records. This can't be undone.
+            </div>
+            <div className="modal-actions">
+              <button className="btn ghost" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
+              <button className="btn danger" onClick={doDeleteAccount} disabled={deleting} autoFocus>
+                {deleting ? "Deleting…" : "Delete account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

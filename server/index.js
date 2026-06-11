@@ -232,6 +232,23 @@ app.patch("/api/me", requireAuth, (req, res) => {
   res.json(publicEmployee(emp));
 });
 
+// DELETE /api/me -> self-service account deletion. Archives the user and keeps
+// their attendance/leaves for admin history, then clears the session.
+app.delete("/api/me", requireAuth, (req, res) => {
+  const emp = findEmployee(req.auth.sub);
+  if (!emp) return res.status(404).json({ error: "User not found" });
+  db.deletedEmployees = db.deletedEmployees || [];
+  db.deletedEmployees.unshift({
+    ...publicEmployee(emp),
+    addedAt: emp.joinDate,
+    deletedAt: new Date().toISOString(),
+  });
+  db.employees = db.employees.filter((e) => e.id !== emp.id);
+  save();
+  clearAuthCookie(res);
+  res.json({ ok: true });
+});
+
 // ---- Reference / directory data --------------------------------------------
 
 app.get("/api/departments", requireAuth, (req, res) => {

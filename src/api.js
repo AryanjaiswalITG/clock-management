@@ -65,6 +65,7 @@ const realApi = {
   updateSettings: (payload) => request("/settings", { method: "PATCH", body: payload }),
   me: () => request("/me"),
   updateProfile: (payload) => request("/me", { method: "PATCH", body: payload }),
+  deleteMe: () => request("/me", { method: "DELETE" }),
   departments: () => request("/departments"),
   employees: () => request("/employees"),
   deletedEmployees: () => request("/employees/deleted"),
