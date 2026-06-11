@@ -518,10 +518,16 @@ tr:last-child td {
   color: #8268d6;
 }
 
-/* ---- Monthly attendance calendar ---- */
+/* ---- Monthly attendance calendar ----
+   Compact, responsive cells: height is capped via clamp() so the grid never
+   balloons into big empty squares on wide screens, yet stays tappable on
+   mobile. Columns use minmax(0,1fr) to prevent overflow. */
+.month-cal {
+  width: 100%;
+}
 .month-cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
 }
 .month-cal-dow {
@@ -535,31 +541,38 @@ tr:last-child td {
 }
 .month-cal-cell {
   position: relative;
-  aspect-ratio: 1 / 1;
-  border-radius: 9px;
+  height: clamp(42px, 6.2vw, 54px);
+  border-radius: 10px;
   border: 1px solid transparent;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding: 5px 7px;
-  min-height: 40px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px;
+  overflow: hidden;
 }
 .month-cal-cell.empty {
-  background: transparent;
+  background: transparent !important;
   border: none;
 }
 .month-cal-day {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .month-cal-dot {
-  position: absolute;
-  left: 7px;
-  bottom: 6px;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
+}
+/* Phones: tighter gaps + slightly shorter cells so a full month fits without scrolling. */
+@media (max-width: 560px) {
+  .month-cal-grid { gap: 4px; }
+  .month-cal-cell { height: clamp(38px, 12vw, 48px); gap: 4px; }
+  .month-cal-dow { font-size: 10px; }
+  .month-cal-day { font-size: 12px; }
 }
 /* status legend + summary chips */
 .status-legend {
