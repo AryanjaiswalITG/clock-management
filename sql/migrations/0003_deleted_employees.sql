@@ -1,17 +1,8 @@
--- Migration 0003 — archive of admin-removed employees ("Old Employees").
--- A snapshot is written here on delete; the live row is then removed from
--- employees (its sessions/daily/leaves cascade away via their FKs).
+-- Migration 0003 — soft-delete for employees ("Old Employees" / audit).
+-- Deleting a user must NOT remove their attendance history, so instead of
+-- removing the row (which would cascade away sessions/daily/leaves), we mark
+-- the employee with deleted_at. Active employees = deleted_at IS NULL.
+-- Attendance stays linked for the user's lifecycle (join_date -> deleted_at).
 
-CREATE TABLE IF NOT EXISTS deleted_employees (
-  archive_id  BIGSERIAL PRIMARY KEY,
-  employee_id INTEGER,
-  name        TEXT NOT NULL,
-  designation TEXT,
-  dept_id     INTEGER,
-  email       TEXT,
-  avatar      TEXT,
-  role        TEXT,
-  added_at    DATE,             -- the employee's original join date
-  deleted_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_deleted_employees_when ON deleted_employees(deleted_at DESC);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(deleted_at);

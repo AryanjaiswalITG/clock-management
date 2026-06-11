@@ -25,6 +25,7 @@ function statusNote(status, cutoff) {
     case "Holiday": return "Company holiday — a non-working day.";
     case "Pending": return "Today — not clocked in yet.";
     case "Upcoming": return "A future working day.";
+    case "Not employed": return "Outside your employment period (before your joining date).";
     default: return "";
   }
 }

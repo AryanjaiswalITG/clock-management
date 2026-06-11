@@ -288,8 +288,7 @@ app.delete("/api/employees/:id", requireAuth, requireAdmin, (req, res) => {
     deletedAt: new Date().toISOString(),
   });
   db.employees = db.employees.filter((e) => e.id !== targetId);
-  db.attendance = db.attendance.filter((a) => a.employeeId !== targetId);
-  db.leaves = db.leaves.filter((l) => l.employeeId !== targetId);
+  // Attendance + leave records are PRESERVED for admin history/audit.
   save();
   res.json({ ok: true, id: targetId });
 });
@@ -380,10 +379,15 @@ app.get("/api/attendance/monthly", requireAuth, (req, res) => {
 });
 
 // GET /api/attendance/monthly/team -> per-employee totals + weekend list (admin).
+// Includes former (deleted) employees, bounded by their deletion date, so the
+// admin keeps the complete attendance history for auditing.
 app.get("/api/attendance/monthly/team", requireAuth, requireAdmin, (req, res) => {
   const { year, month } = parseMonth(req);
+  const formers = (db.deletedEmployees || []).map((d) => ({
+    ...d, endDate: dateKey(new Date(d.deletedAt)), deleted: true,
+  }));
   res.json(monthlyForTeam({
-    year, month, employees: db.employees,
+    year, month, employees: [...db.employees, ...formers],
     records: db.attendance, leaves: db.leaves, settings: db.settings,
   }));
 });

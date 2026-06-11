@@ -81,15 +81,18 @@ const rowToEmployee = (r) => ({
   passwordHash: r.password_hash,
 });
 
+// Active employees only (deleted_at IS NULL).
 export async function getEmployees() {
-  return (await query(`SELECT * FROM employees ORDER BY id`)).rows.map(rowToEmployee);
+  return (await query(`SELECT * FROM employees WHERE deleted_at IS NULL ORDER BY id`)).rows.map(rowToEmployee);
 }
+// Any employee by id (incl. soft-deleted) — used for monthly history of formers.
 export async function getEmployee(id) {
   const r = (await query(`SELECT * FROM employees WHERE id = $1`, [id])).rows[0];
   return r ? rowToEmployee(r) : null;
 }
+// Login lookup — active accounts only (deleted users can't sign in).
 export async function getEmployeeByEmail(email) {
-  const r = (await query(`SELECT * FROM employees WHERE LOWER(email) = LOWER($1)`, [email])).rows[0];
+  const r = (await query(`SELECT * FROM employees WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL`, [email])).rows[0];
   return r ? rowToEmployee(r) : null;
 }
 
@@ -103,28 +106,20 @@ export async function createEmployee(e) {
   return rowToEmployee(r);
 }
 
-// Archive of admin-removed employees (newest first).
+// Soft-deleted ("Old") employees, newest first. addedAt = join date.
 export async function getDeletedEmployees() {
-  return (await query(`SELECT * FROM deleted_employees ORDER BY deleted_at DESC`)).rows.map((r) => ({
-    id: r.employee_id, name: r.name, designation: r.designation, deptId: r.dept_id,
-    email: r.email, avatar: r.avatar, role: r.role,
-    addedAt: r.added_at ? dateKey(new Date(r.added_at)) : null,
+  return (await query(`SELECT * FROM employees WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC`)).rows.map((r) => ({
+    ...rowToEmployee(r),
+    addedAt: dateKey(new Date(r.join_date)),
     deletedAt: r.deleted_at.toISOString(),
   }));
 }
 
-// Snapshot an employee into the archive, then delete them. Their sessions,
-// daily_attendance and leaves cascade away via ON DELETE CASCADE.
+// Soft-delete: mark the employee removed but KEEP the row so attendance,
+// daily_attendance and leaves stay linked for the lifecycle (join -> deleted).
 export async function deleteEmployee(id) {
-  const emp = await getEmployee(id);
-  if (!emp) return null;
-  await query(
-    `INSERT INTO deleted_employees (employee_id, name, designation, dept_id, email, avatar, role, added_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [emp.id, emp.name, emp.designation, emp.deptId, emp.email, emp.avatar, emp.role, emp.joinDate]
-  );
-  await query(`DELETE FROM employees WHERE id = $1`, [id]);
-  return { ok: true, id };
+  const res = await query(`UPDATE employees SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`, [id]);
+  return res.rowCount ? { ok: true, id } : null;
 }
 
 export async function updateEmployee(id, patch) {

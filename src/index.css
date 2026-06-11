@@ -940,6 +940,9 @@ button.status-chip {
 tr.row-selected > td {
   background: color-mix(in srgb, var(--teal) 8%, transparent);
 }
+tr.row-former > td {
+  opacity: 0.72;
+}
 table input[type="checkbox"] {
   width: 16px;
   height: 16px;

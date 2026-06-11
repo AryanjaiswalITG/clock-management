@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS employees (
   -- the day is auto-marked 'Half Day'. NULL disables the rule.
   half_day_cutoff TIME,
   password_hash   TEXT NOT NULL,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Soft delete: NULL = active. Set on delete so attendance history is kept
+  -- for the lifecycle join_date -> deleted_at (admin audit).
+  deleted_at      TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(dept_id);
 
@@ -109,17 +112,6 @@ CREATE TABLE IF NOT EXISTS monthly_summary (
   PRIMARY KEY (employee_id, year, month)
 );
 
--- ---- Archive of admin-removed employees ("Old Employees") ------------------
-
-CREATE TABLE IF NOT EXISTS deleted_employees (
-  archive_id  BIGSERIAL PRIMARY KEY,
-  employee_id INTEGER,
-  name        TEXT NOT NULL,
-  designation TEXT,
-  dept_id     INTEGER,
-  email       TEXT,
-  avatar      TEXT,
-  role        TEXT,
-  added_at    DATE,
-  deleted_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- Note: removed ("Old") employees are kept in the employees table via the
+-- soft-delete column employees.deleted_at (NULL = active). This preserves their
+-- attendance history. Active list = WHERE deleted_at IS NULL.

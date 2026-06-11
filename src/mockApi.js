@@ -299,8 +299,8 @@ export function createMockApi(ApiError) {
         deletedAt: new Date().toISOString(),
       });
       db.employees = db.employees.filter((e) => e.id !== targetId);
-      db.attendance = db.attendance.filter((a) => a.employeeId !== targetId);
-      db.leaves = db.leaves.filter((l) => l.employeeId !== targetId);
+      // Attendance + leave records are PRESERVED (not removed) so admins keep
+      // the full history for the deleted user's lifecycle (audit/reporting).
       saveDb(db);
       return { ok: true, id: targetId };
     },
@@ -375,16 +375,21 @@ export function createMockApi(ApiError) {
     },
 
     // Per-employee totals + weekend list for the whole team (admin). month is 1-12.
+    // Includes FORMER (deleted) employees so admins keep complete history; each
+    // former row is bounded by its deletion date (endDate) and flagged deleted.
     async monthlyTeam({ year, month } = {}) {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
       if (emp.role !== "admin") throw new ApiError("Admins only", 403);
       const now = new Date();
+      const formers = (db.deletedEmployees || []).map((d) => ({
+        ...d, endDate: dateKey(new Date(d.deletedAt)), deleted: true,
+      }));
       return monthlyForTeam({
         year: year || now.getFullYear(),
         month: month || now.getMonth() + 1,
-        employees: db.employees, records: db.attendance, leaves: db.leaves, settings: db.settings,
+        employees: [...db.employees, ...formers], records: db.attendance, leaves: db.leaves, settings: db.settings,
       });
     },
 

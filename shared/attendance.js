@@ -54,6 +54,7 @@ export const STATUS = {
   HOLIDAY: "Holiday",
   UPCOMING: "Upcoming", // a future date this month
   PENDING: "Pending",   // today, no check-in yet (day not over)
+  OUTSIDE: "Not employed", // date is outside the employee's lifecycle (before join / after exit)
 };
 
 // Default weekend = Saturday (6) + Sunday (0). getDay(): 0=Sun … 6=Sat.
@@ -93,9 +94,11 @@ export function leaveCovers(leaves = [], employeeId, dateStr) {
 }
 
 // Decide the status for one employee on one calendar day.
-// Weekends and holidays are calendar facts (classified for any date). For a
-// working day: past with punches -> Present/Half Day, past without -> Absent,
-// today without punches -> Pending, future -> Upcoming.
+// Lifecycle first: dates before the account's creation (joinDate) or after its
+// deletion (endDate) are "Not employed" and are never counted. Then weekends
+// and holidays are calendar facts. For a working day: past with punches ->
+// Present/Half Day, past without -> Absent, today without -> Pending,
+// future -> Upcoming.
 // Rule 1 (Half Day): a cutoff is configured AND the first check-in is AFTER it.
 // Rule 2 (Absent):  no check-in at all on a past working day (and not on leave).
 export function dayStatus({
@@ -106,8 +109,13 @@ export function dayStatus({
   weekendDays = DEFAULT_WEEKEND_DAYS,
   holidays = [],
   today = dateKey(),
+  joinDate = null,   // "YYYY-MM-DD" account creation date
+  endDate = null,    // "YYYY-MM-DD" deletion date (inclusive), null = still active
 }) {
-  // Calendar facts first — true regardless of whether the day is past or future.
+  // Outside the employment lifecycle — not attendance, never counted.
+  if (joinDate && date < joinDate) return STATUS.OUTSIDE;
+  if (endDate && date > endDate) return STATUS.OUTSIDE;
+  // Calendar facts — true regardless of whether the day is past or future.
   if (isWeekend(date, weekendDays)) return STATUS.WEEKEND;
   if (isHoliday(date, holidays)) return STATUS.HOLIDAY;
   if (onLeave) return STATUS.LEAVE;
@@ -145,17 +153,21 @@ function tallyStatus(totals, status) {
   else if (status === STATUS.HOLIDAY) totals.holiday++;
   else if (status === STATUS.UPCOMING) totals.upcoming++;
   else if (status === STATUS.PENDING) totals.pending++;
-  // Working days = the days an employee is expected to attend.
-  if (status !== STATUS.WEEKEND && status !== STATUS.HOLIDAY && status !== STATUS.UPCOMING) {
+  // Working days = the days an employee is expected to attend (within lifecycle).
+  if (status !== STATUS.WEEKEND && status !== STATUS.HOLIDAY &&
+      status !== STATUS.UPCOMING && status !== STATUS.OUTSIDE) {
     totals.workingDays++;
   }
 }
 
 // Full per-day breakdown + totals for ONE employee over a month (1-12).
-export function monthlyForEmployee({ year, month, employee, records = [], leaves = [], settings = {}, today = dateKey() }) {
+// joinDate (from the employee) and endDate (deletion date for former employees)
+// bound the lifecycle; dates outside it are "Not employed" and not counted.
+export function monthlyForEmployee({ year, month, employee, records = [], leaves = [], settings = {}, today = dateKey(), endDate = null }) {
   const monthIndex = month - 1;
   const weekendDays = settings.weekendDays ?? DEFAULT_WEEKEND_DAYS;
   const holidays = settings.holidays ?? [];
+  const joinDate = employee.joinDate || null;
   const byDate = {};
   for (const r of records) if (r.employeeId === employee.id) byDate[r.date] = r;
 
@@ -163,7 +175,7 @@ export function monthlyForEmployee({ year, month, employee, records = [], leaves
   const days = monthDates(year, monthIndex).map((date) => {
     const sessions = byDate[date]?.sessions || [];
     const onLeave = leaveCovers(leaves, employee.id, date);
-    const status = dayStatus({ date, sessions, halfDayCutoff: employee.halfDayCutoff, onLeave, weekendDays, holidays, today });
+    const status = dayStatus({ date, sessions, halfDayCutoff: employee.halfDayCutoff, onLeave, weekendDays, holidays, today, joinDate, endDate });
     tallyStatus(totals, status);
     const s = summarize(sessions, employee.targetHours);
     return {
@@ -187,9 +199,10 @@ export function monthlyForTeam({ year, month, employees = [], records = [], leav
   const holidays = settings.holidays ?? [];
   const dates = monthDates(year, monthIndex);
   const weekends = dates.filter((d) => isWeekend(d, weekendDays));
+  // Each emp may carry endDate (former employees) + deleted flag for audit rows.
   const rows = employees.map((emp) => {
-    const { totals } = monthlyForEmployee({ year, month, employee: emp, records, leaves, settings, today });
-    return { employeeId: emp.id, name: emp.name, totals };
+    const { totals } = monthlyForEmployee({ year, month, employee: emp, records, leaves, settings, today, endDate: emp.endDate || null });
+    return { employeeId: emp.id, name: emp.name, deleted: !!emp.deleted, totals };
   });
   return { year, month, weekendDays, holidays, weekends, holidayDates: holidays.filter((h) => dates.includes(h)), rows };
 }

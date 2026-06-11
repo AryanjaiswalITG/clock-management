@@ -165,9 +165,15 @@ export default function Attendance() {
           </thead>
           <tbody>
             {!report && <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--ink-soft)", padding: 20 }}>Loading…</td></tr>}
-            {report?.rows.map((r) => (
-              <tr key={r.employeeId}>
-                <td><div className="emp-cell"><div className="emp-avatar">{empAvatar(r.employeeId)}</div><span className="emp-name">{r.name}</span></div></td>
+            {report?.rows.map((r, i) => (
+              <tr key={`${r.employeeId}-${i}`} className={r.deleted ? "row-former" : ""}>
+                <td>
+                  <div className="emp-cell">
+                    <div className="emp-avatar">{empAvatar(r.employeeId)}</div>
+                    <span className="emp-name">{r.name}</span>
+                    {r.deleted && <span className="badge gray" style={{ marginLeft: 8 }}>Former</span>}
+                  </div>
+                </td>
                 <td>{r.totals.present}</td>
                 <td>{r.totals.halfDay}</td>
                 <td>{r.totals.absent}</td>

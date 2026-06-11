@@ -12,6 +12,7 @@ export const STATUS_STYLE = {
   [STATUS.HOLIDAY]: { label: "Holiday", color: "var(--teal)", soft: "var(--teal-soft)" },
   [STATUS.UPCOMING]:{ label: "Upcoming", color: "var(--ink-soft)", soft: "transparent" },
   [STATUS.PENDING]: { label: "Pending", color: "var(--amber)", soft: "rgba(217,138,43,0.10)" },
+  [STATUS.OUTSIDE]: { label: "Not employed", color: "var(--line)", soft: "transparent" },
 };
 
 export const styleFor = (status) => STATUS_STYLE[status] || STATUS_STYLE[STATUS.UPCOMING];
