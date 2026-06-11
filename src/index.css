@@ -927,9 +927,9 @@ button.status-chip {
   color: #fff;
 }
 .btn.danger-outline {
-  background: none;
+  background: var(--rose);
   border: 1px solid color-mix(in srgb, var(--rose) 50%, var(--line));
-  color: var(--rose);
+  color: var(--ink-soft);
 }
 .btn.danger-outline:disabled {
   color: var(--ink-soft);
