@@ -6,6 +6,7 @@ import { formatDuration, formatHMS, formatClock, formatClockSec, formatHMSColon 
 import MonthCalendar from "../components/MonthCalendar";
 import MonthPicker from "../components/MonthPicker";
 import { SUMMARY_ITEMS, styleFor } from "../components/attendanceStatus";
+import { useAttendanceView } from "../attendance/AttendanceViewContext";
 
 const TODAY = new Date();
 const CUR_MONTH = { year: TODAY.getFullYear(), month: TODAY.getMonth() + 1 };
@@ -52,6 +53,9 @@ function StatCard({ icon: Icon, label, value, sub, tone }) {
 
 export default function MyAttendance() {
   const { user } = useAuth();
+  // view ("daily" | "monthly") + the header's monthly-summary popup are driven
+  // from the shared AttendanceView context, controlled by the header switch.
+  const { view, setMonthly: publishMonthly, setActive } = useAttendanceView();
   const [summary, setSummary] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
@@ -60,6 +64,16 @@ export default function MyAttendance() {
   const [resetting, setResetting] = useState(false);
   const [month, setMonth] = useState(CUR_MONTH);
   const [monthly, setMonthly] = useState(null);
+
+  // Tell the header to show the My Attendance / Monthly Attendance switch while
+  // this page is mounted.
+  useEffect(() => {
+    setActive(true);
+    return () => setActive(false);
+  }, [setActive]);
+
+  // Mirror the monthly summary up so the header's hover popup can show it.
+  useEffect(() => { publishMonthly(monthly); }, [monthly, publishMonthly]);
 
   const load = useCallback(async () => {
     try {
@@ -133,6 +147,9 @@ export default function MyAttendance() {
         </div>
       )}
 
+      {/* ===== Daily view (default) ===== */}
+      {view === "daily" && (
+      <div className="attn-view fade-in" key="daily">
       <div className="grid cols-2" style={{ marginBottom: 18 }}>
         {/* Live clock + punch button */}
         <div className="card panel-invert" style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
@@ -250,9 +267,14 @@ export default function MyAttendance() {
           </tbody>
         </table>
       </div>
+      </div>
+      )}
 
+      {/* ===== Monthly view ===== */}
+      {view === "monthly" && (
+      <div className="attn-view fade-in" key="monthly">
       {/* ---- Monthly overview ---- */}
-      <div className="card" style={{ marginTop: 18 }}>
+      <div className="card">
         <div className="row-between" style={{ marginBottom: 4 }}>
           <div>
             <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><CalendarRange size={17} /> Monthly Attendance</div>
@@ -309,6 +331,8 @@ export default function MyAttendance() {
             ))}
           </div>
         </div>
+      )}
+      </div>
       )}
 
       {/* Reset confirmation — guards against accidental clicks. */}

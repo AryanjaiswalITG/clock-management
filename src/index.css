@@ -574,6 +574,159 @@ tr:last-child td {
   .month-cal-dow { font-size: 10px; }
   .month-cal-day { font-size: 12px; }
 }
+
+/* ---- Header attendance view switch (My Attendance / Monthly Attendance) ---- */
+.view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  margin-left: 6px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg);
+  flex-shrink: 0;
+}
+.view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.view-tab:hover { color: var(--ink); }
+.view-tab.active {
+  background: var(--surface);
+  color: var(--teal);
+  box-shadow: 0 1px 5px rgba(22, 32, 29, 0.12);
+}
+.view-tab:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+.vt-short { display: none; }
+
+/* Hover popup on the Monthly Attendance tab — mirrors the profile dropdown. */
+.attn-menu {
+  position: relative;
+  display: inline-flex;
+}
+.attn-popup {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: 300px;
+  max-width: 86vw;
+  padding: 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  box-shadow: 0 14px 38px rgba(22, 32, 29, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px) scale(0.98);
+  transform-origin: top left;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  z-index: 40;
+}
+/* invisible bridge so the cursor can cross the gap without closing */
+.attn-popup::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -12px;
+  height: 12px;
+}
+.attn-menu:hover .attn-popup,
+.attn-menu:focus-within .attn-popup {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+.attn-popup-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.attn-popup-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 10px;
+}
+.attn-popup-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.attn-popup-stat .n {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.attn-popup-stat .l {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.attn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.attn-popup-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  padding: 4px 2px;
+}
+.attn-popup-foot strong {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.attn-popup-empty {
+  font-size: 13px;
+  color: var(--ink-soft);
+  padding: 10px 2px;
+}
+
+/* Tablet & below: compact labels, and the hover popup (a pointer affordance)
+   is hidden on touch — tapping the tab simply switches the view. */
+@media (max-width: 768px) {
+  .vt-full { display: none; }
+  .vt-short { display: inline; }
+  .attn-popup { display: none; }
+  .view-tab { padding: 7px 10px; }
+}
+/* Phones: drop the (redundant) page title so the switch fits the header. */
+@media (max-width: 560px) {
+  .topbar-left.has-switch h1 { display: none; }
+  .view-switch { margin-left: 0; }
+}
 /* status legend + summary chips */
 .status-legend {
   display: flex;

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { DataProvider } from "./data/DataContext";
+import { AttendanceViewProvider } from "./attendance/AttendanceViewContext";
 import Layout from "./layout/Layout";
 
 import Login from "./pages/Login";
@@ -47,7 +48,8 @@ function AppShell() {
   const { isAdmin } = useAuth();
 
   const inner = (
-    <Layout>
+    <AttendanceViewProvider>
+      <Layout>
       <Routes>
         {isAdmin ? (
           <>
@@ -65,7 +67,8 @@ function AppShell() {
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Layout>
+      </Layout>
+    </AttendanceViewProvider>
   );
 
   // Admin pages read org-wide data from the backend via DataProvider.

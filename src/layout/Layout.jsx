@@ -1,10 +1,72 @@
 import { useState, useEffect } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, CalendarClock, Plane, Wallet, Network, Search, Bell, User, LogOut, Sun, Moon, Settings as SettingsIcon, Mail, Briefcase, Menu, X } from "lucide-react";
+import { LayoutDashboard, Users, CalendarClock, CalendarRange, Plane, Wallet, Network, Search, Bell, User, LogOut, Sun, Moon, Settings as SettingsIcon, Mail, Briefcase, Menu, X } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
 import { useSettings } from "../settings/SettingsContext";
+import { useAttendanceView } from "../attendance/AttendanceViewContext";
+import { SUMMARY_ITEMS, styleFor } from "../components/attendanceStatus";
+import { formatDuration } from "../utils/time";
 import Avatar from "../components/Avatar";
+
+const MONTHS = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
+// The "My Attendance / Monthly Attendance" switch + hover summary, rendered in
+// the header only while the employee's My Attendance page is mounted.
+function AttendanceSwitch() {
+  const { view, setView, monthly, active } = useAttendanceView();
+  if (!active) return null;
+
+  const monthLabel = monthly ? `${MONTHS[monthly.month - 1]} ${monthly.year}` : "";
+  const totalWorked = monthly ? monthly.days.reduce((s, d) => s + (d.workedSec || 0), 0) : 0;
+
+  return (
+    <div className="view-switch" role="tablist" aria-label="Attendance view">
+      <button type="button" role="tab" aria-selected={view === "daily"}
+        className={`view-tab ${view === "daily" ? "active" : ""}`} onClick={() => setView("daily")}>
+        <CalendarClock size={15} />
+        <span className="vt-full">My Attendance</span><span className="vt-short">Daily</span>
+      </button>
+
+      <div className="attn-menu">
+        <button type="button" role="tab" aria-selected={view === "monthly"} aria-haspopup="dialog"
+          className={`view-tab ${view === "monthly" ? "active" : ""}`} onClick={() => setView("monthly")}>
+          <CalendarRange size={15} />
+          <span className="vt-full">Monthly Attendance</span><span className="vt-short">Monthly</span>
+        </button>
+
+        <div className="attn-popup" role="dialog" aria-label="Monthly attendance summary">
+          <div className="attn-popup-head">
+            <div className="pd-name">Monthly Attendance</div>
+            <div className="pd-role">{monthLabel || "This month"}</div>
+          </div>
+          {monthly ? (
+            <>
+              <div className="attn-popup-grid">
+                {SUMMARY_ITEMS.map(({ key, status }) => {
+                  const st = styleFor(status);
+                  return (
+                    <div key={key} className="attn-popup-stat">
+                      <span className="attn-dot" style={{ background: st.color }} />
+                      <span className="n">{monthly.totals[key]}</span>
+                      <span className="l">{st.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="profile-dropdown-sep" />
+              <div className="attn-popup-foot"><span>Worked this month</span><strong>{formatDuration(totalWorked)}</strong></div>
+              <div className="attn-popup-foot"><span>Working days</span><strong>{monthly.totals.workingDays}</strong></div>
+            </>
+          ) : (
+            <div className="attn-popup-empty">Loading summary…</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Navigation differs by role.
 const ADMIN_NAV = [
@@ -45,6 +107,7 @@ export default function Layout({ children }) {
   const { user, isAdmin, logout } = useAuth();
   const { mode, toggleMode } = useTheme();
   const { companyName } = useSettings();
+  const { active: switchActive } = useAttendanceView();
   const nav = isAdmin ? ADMIN_NAV : EMPLOYEE_NAV;
 
   // Make the floating header a touch more solid once the page is scrolled.
@@ -105,11 +168,12 @@ export default function Layout({ children }) {
 
       <div className="main">
         <header className={`topbar ${scrolled ? "scrolled" : ""}`}>
-          <div className="topbar-left">
+          <div className={`topbar-left ${switchActive ? "has-switch" : ""}`}>
             <button className="menu-btn" onClick={() => setNavOpen(true)} aria-label="Open menu">
               <Menu size={22} />
             </button>
             <h1>{title}</h1>
+            <AttendanceSwitch />
           </div>
           <div className="topbar-right">
             <div className="search">
