@@ -7,6 +7,7 @@ import { useSettings } from "../settings/SettingsContext";
 import Avatar from "../components/Avatar";
 import Badge from "../components/Badge";
 import { formatCutoff as fmtCutoff } from "../utils/time";
+import { isNewcomer } from "../../shared/newcomer";
 
 const MAX_PHOTO_BYTES = 3.5 * 1024 * 1024;
 
@@ -26,7 +27,9 @@ function ViewRow({ icon: Icon, label, value, locked }) {
 
 export default function Profile() {
   const { user, updateUser, logout, deleteAccount } = useAuth();
-  const { companyName, updateCompany } = useSettings();
+  // Company name is an org-level setting managed by admins in Settings — shown
+  // here read-only so every user sees the current brand.
+  const { companyName } = useSettings();
   const [depts, setDepts] = useState([]);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
@@ -113,7 +116,6 @@ export default function Profile() {
       deptId: user.deptId,
       targetHours: user.targetHours,
       halfDayCutoff: user.halfDayCutoff || "",
-      companyName,
     });
     setError(null);
     setEditing(true);
@@ -141,10 +143,6 @@ export default function Profile() {
         halfDayCutoff: form.halfDayCutoff || null,
       });
       updateUser(updated);     // refresh sidebar/topbar + everywhere
-      // Company name is an org-level setting — save it if it changed.
-      if (form.companyName.trim() !== companyName) {
-        await updateCompany(form.companyName.trim());
-      }
       setEditing(false);
       setForm(null);
       setFlash(true);
@@ -189,6 +187,7 @@ export default function Profile() {
             <span className="badge teal">{deptName}</span>
             <span className="badge gray" style={{ textTransform: "capitalize" }}>{user.role}</span>
             <Badge status={user.status} />
+            {isNewcomer(user) && <Badge status="Newly" />}
           </div>
           <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <label className="btn ghost sm" style={{ cursor: photoBusy ? "default" : "pointer" }}>
@@ -217,12 +216,6 @@ export default function Profile() {
         <form className="card" onSubmit={save}>
           <div className="card-title">Edit details</div>
           <div className="card-sub">Update your information. Role and joining date are fixed.</div>
-
-          <div className="field">
-            <label className="field-label">Company name</label>
-            <input className="field-control" value={form.companyName} onChange={set("companyName")} required maxLength={40} placeholder="e.g. Northwind" />
-            <div className="field-hint">Shown as the brand in the sidebar and on the login screen.</div>
-          </div>
 
           <div className="field-row">
             <div className="field">

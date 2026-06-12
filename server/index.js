@@ -106,6 +106,7 @@ app.post("/api/auth/register", (req, res) => {
     role: "employee",
     targetHours: 8,
     halfDayCutoff: null,
+    createdAt: new Date().toISOString(),
     passwordHash: bcrypt.hashSync(String(password), 10),
   };
   db.employees.push(emp);
@@ -299,7 +300,8 @@ app.post("/api/employees", requireAuth, requireAdmin, (req, res) => {
     id, name: trimmedName, designation: "Employee", deptId: db.departments[0]?.id ?? 1,
     managerId: null, email: trimmedEmail, joinDate: dateKey(), status: "Active",
     avatar: initials(trimmedName), avatarUrl: null, role: "employee",
-    targetHours: 8, halfDayCutoff: null, passwordHash: bcrypt.hashSync(String(password), 10),
+    targetHours: 8, halfDayCutoff: null, createdAt: new Date().toISOString(),
+    passwordHash: bcrypt.hashSync(String(password), 10),
   };
   db.employees.push(emp);
   save();
@@ -453,8 +455,9 @@ app.post("/api/leaves", requireAuth, (req, res) => {
   res.status(201).json(leave);
 });
 
-// Approve / reject — admins (any request) and managers (their reports only).
-app.patch("/api/leaves/:id", requireAuth, requireManagerOrAdmin, (req, res) => {
+// Approve / reject — ADMINS ONLY. Leave decisions are a company-level action,
+// so managers and employees can view requests but cannot act on them.
+app.patch("/api/leaves/:id", requireAuth, requireAdmin, (req, res) => {
   const { status } = req.body || {};
   if (!["Approved", "Rejected", "Pending"].includes(status)) {
     return res.status(400).json({ error: "Invalid status" });
@@ -462,9 +465,6 @@ app.patch("/api/leaves/:id", requireAuth, requireManagerOrAdmin, (req, res) => {
   const leave = db.leaves.find((l) => l.id === Number(req.params.id));
   if (!leave) return res.status(404).json({ error: "Leave not found" });
   if (leave.employeeId === req.auth.sub) return res.status(403).json({ error: "You can't approve your own leave" });
-  if (req.auth.role === "manager" && !reportsOf(req.auth.sub).some((r) => r.id === leave.employeeId)) {
-    return res.status(403).json({ error: "That request isn't from one of your reports" });
-  }
   leave.status = status;
   save();
   res.json(leave);

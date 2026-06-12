@@ -50,6 +50,9 @@ export function load() {
     if (typeof db._nextRegId !== "number") { db._nextRegId = 1; migrated = true; }
     for (const e of db.employees) {
       if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
+      // Backfill account-creation timestamp for older records, derived from
+      // joinDate, so the "Newly" badge works without losing existing data.
+      if (!e.createdAt && e.joinDate) { e.createdAt = `${e.joinDate}T00:00:00.000Z`; migrated = true; }
     }
     if (migrated) save();
   } else {

@@ -4,6 +4,7 @@ import { useData } from "../data/DataContext";
 import { useAuth } from "../auth/AuthContext";
 import Badge from "../components/Badge";
 import Avatar from "../components/Avatar";
+import { isNewcomer } from "../../shared/newcomer";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMPTY_FORM = { name: "", email: "", password: "", confirm: "" };
@@ -142,7 +143,12 @@ export default function Employees() {
                   <td>{deptName(e.deptId)}</td>
                   <td style={{ color: "var(--ink-soft)" }}>{e.email}</td>
                   <td>{new Date(e.joinDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</td>
-                  <td><Badge status={e.status} /></td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <Badge status={e.status} />
+                      {isNewcomer(e) && <Badge status="Newly" />}
+                    </div>
+                  </td>
                 </tr>
               );
             })}

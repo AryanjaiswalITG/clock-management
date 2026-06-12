@@ -111,7 +111,10 @@ export function buildDemoRegularizations(today = new Date()) {
 export function buildDemoData(today = new Date()) {
   return {
     departments: DEMO_DEPARTMENTS,
-    employees: DEMO_EMPLOYEES,
+    // Seeded profiles get an explicit createdAt from their (historical) join
+    // date so the "Newly" badge never lights up for the demo org — only for
+    // accounts actually created after deployment.
+    employees: DEMO_EMPLOYEES.map((e) => ({ ...e, createdAt: `${e.joinDate}T00:00:00.000Z` })),
     attendance: buildDemoAttendance(today),
     leaves: buildDemoLeaves(today),
     holidays: buildDemoHolidays(today),

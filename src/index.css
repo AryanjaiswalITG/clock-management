@@ -517,6 +517,10 @@ tr:last-child td {
   background: rgba(124, 92, 209, 0.15);
   color: #8268d6;
 }
+.badge.blue {
+  background: rgba(45, 124, 246, 0.14);
+  color: #2d7cf6;
+}
 
 /* ---- Monthly attendance calendar ----
    Compact, responsive cells: height is capped via clamp() so the grid never

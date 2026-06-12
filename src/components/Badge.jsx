@@ -4,6 +4,8 @@ const MAP = {
   // Monthly attendance statuses
   "Half Day": "amber", Leave: "violet", Weekend: "gray", Holiday: "teal",
   Upcoming: "gray", "Not employed": "gray",
+  // Newly created account (auto-expires after a fixed window — see shared/newcomer.js)
+  Newly: "blue",
 };
 
 export default function Badge({ status }) {

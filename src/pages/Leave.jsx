@@ -6,7 +6,7 @@ import { LEAVE_TYPES, balancesFor, validateLeaveRequest, leaveDays } from "../..
 import Badge from "../components/Badge";
 
 export default function Leave() {
-  const { user, canApprove } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { leaves, setLeaveStatus, applyLeave, empName, empAvatar } = useData();
   const [tab, setTab] = useState("All");
 
@@ -84,7 +84,8 @@ export default function Leave() {
             )}
             {shown.map((l) => {
               const mine = l.employeeId === user.id;
-              const actionable = canApprove && !mine && l.status === "Pending";
+              // Leave approval is admins-only; everyone else sees status only.
+              const actionable = isAdmin && !mine && l.status === "Pending";
               return (
                 <tr key={l.id}>
                   <td><div className="emp-cell"><div className="emp-avatar">{empAvatar(l.employeeId)}</div><span className="emp-name">{empName(l.employeeId)}{mine ? " (you)" : ""}</span></div></td>

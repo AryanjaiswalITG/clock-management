@@ -65,6 +65,9 @@ function loadDb() {
   if (typeof db._nextRegId !== "number") { db._nextRegId = 1; migrated = true; }
   for (const e of db.employees) {
     if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
+    // Backfill account-creation timestamp for accounts that predate the field,
+    // deriving it from joinDate so the "Newly" badge behaves sensibly.
+    if (!e.createdAt && e.joinDate) { e.createdAt = `${e.joinDate}T00:00:00.000Z`; migrated = true; }
   }
   if (migrated) saveDb(db);
   return db;
@@ -150,7 +153,7 @@ export function createMockApi(ApiError) {
         deptId: db.departments[0]?.id ?? 1, managerId: null, email: trimmedEmail,
         joinDate: dateKey(), status: "Active", avatar: initials(trimmedName),
         avatarUrl: null, role: "employee", targetHours: 8, halfDayCutoff: null,
-        password: String(password),
+        createdAt: new Date().toISOString(), password: String(password),
       };
       db.employees.push(emp);
       saveDb(db);
@@ -309,7 +312,8 @@ export function createMockApi(ApiError) {
         id, name, designation: "Employee", deptId: db.departments[0]?.id ?? 1,
         managerId: null, email, joinDate: dateKey(), status: "Active",
         avatar: initials(name), avatarUrl: null, role: "employee",
-        targetHours: 8, halfDayCutoff: null, password: String(password),
+        targetHours: 8, halfDayCutoff: null, createdAt: new Date().toISOString(),
+        password: String(password),
       };
       db.employees.push(emp);
       saveDb(db);
@@ -473,17 +477,14 @@ export function createMockApi(ApiError) {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
-      if (!canApprove(emp)) throw new ApiError("You can't approve leave", 403);
+      // Leave decisions are admins-only (managers/employees can view, not act).
+      if (emp.role !== "admin") throw new ApiError("Only admins can approve leave", 403);
       if (!["Approved", "Rejected", "Pending"].includes(status)) {
         throw new ApiError("Invalid status", 400);
       }
       const leave = db.leaves.find((l) => l.id === Number(id));
       if (!leave) throw new ApiError("Leave not found", 404);
       if (leave.employeeId === emp.id) throw new ApiError("You can't approve your own leave", 403);
-      // Managers may only act on their own reports' requests.
-      if (emp.role === "manager" && !reportsOf(db, emp.id).some((r) => r.id === leave.employeeId)) {
-        throw new ApiError("That request isn't from one of your reports", 403);
-      }
       leave.status = status;
       saveDb(db);
       return leave;

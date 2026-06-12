@@ -12,30 +12,34 @@ export function SettingsProvider({ children }) {
   const [weekendDays, setWeekendDays] = useState(DEFAULT_WEEKEND_DAYS);
   const [holidays, setHolidays] = useState([]);
 
-  useEffect(() => {
-    api.settings().then((s) => {
-      setCompanyName(s.companyName);
-      if (Array.isArray(s.weekendDays)) setWeekendDays(s.weekendDays);
-      if (Array.isArray(s.holidays)) setHolidays(s.holidays);
-    }).catch(() => {});
+  const apply = useCallback((s) => {
+    if (s?.companyName !== undefined) setCompanyName(s.companyName);
+    if (Array.isArray(s?.weekendDays)) setWeekendDays(s.weekendDays);
+    if (Array.isArray(s?.holidays)) setHolidays(s.holidays);
+    return s;
   }, []);
 
-  const apply = (s) => {
-    setCompanyName(s.companyName);
-    if (Array.isArray(s.weekendDays)) setWeekendDays(s.weekendDays);
-    if (Array.isArray(s.holidays)) setHolidays(s.holidays);
-    return s;
-  };
+  // Load org settings on mount, and again whenever the tab regains focus, so an
+  // admin's change to the company name / attendance policy propagates to every
+  // signed-in user's open session without needing a full reload.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchSettings = () =>
+      api.settings().then((s) => { if (!cancelled) apply(s); }).catch(() => {});
+    fetchSettings();
+    window.addEventListener("focus", fetchSettings);
+    return () => { cancelled = true; window.removeEventListener("focus", fetchSettings); };
+  }, [apply]);
 
   // Persist a new company name and update the brand everywhere.
   const updateCompany = useCallback(async (name) => {
     return apply(await api.updateSettings({ companyName: name }));
-  }, []);
+  }, [apply]);
 
   // Persist the attendance policy (weekend days and/or holiday list).
   const updatePolicy = useCallback(async (patch) => {
     return apply(await api.updateSettings(patch));
-  }, []);
+  }, [apply]);
 
   return (
     <SettingsContext.Provider value={{ companyName, weekendDays, holidays, updateCompany, updatePolicy }}>
