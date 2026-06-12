@@ -170,7 +170,11 @@ export function createMockApi(ApiError) {
     async updateSettings(payload = {}) {
       await delay();
       const db = loadDb();
-      requireUser(db);
+      const me = requireUser(db);
+      // Org-wide settings (company name, weekend days, holidays) are shared by
+      // everyone, so only admins may change them — a normal user's edit must
+      // never leak into the admin's (or anyone else's) account.
+      if (me.role !== "admin") throw new ApiError("Only admins can change company settings", 403);
       if (payload.companyName !== undefined) {
         const trimmed = String(payload.companyName).trim();
         if (!trimmed) throw new ApiError("Company name cannot be empty", 400);

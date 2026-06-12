@@ -55,11 +55,12 @@ export default function Settings() {
     setBusy(true);
     setError(null);
     try {
-      if (company.trim() && company.trim() !== companyName) {
-        await updateCompany(company.trim());
-      }
-      // Persist attendance policy if it changed (admins only).
+      // Org-wide settings (company name + attendance policy) are admins-only.
+      // A normal user's Save only persists their personal theme prefs.
       if (isAdmin) {
+        if (company.trim() && company.trim() !== companyName) {
+          await updateCompany(company.trim());
+        }
         const policy = {};
         if (JSON.stringify(weekend) !== JSON.stringify(weekendDays)) policy.weekendDays = weekend;
         if (JSON.stringify(holidayList) !== JSON.stringify(holidays)) policy.holidays = holidayList;
@@ -171,15 +172,17 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Company */}
-      <div className="card" style={{ marginTop: 18 }}>
-        <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><Building size={17} /> Company information</div>
-        <div className="card-sub">Shown as the brand in the sidebar, header and login screen.</div>
-        <div className="field" style={{ maxWidth: 380, marginBottom: 0 }}>
-          <label className="field-label">Company name</label>
-          <input className="field-control" value={company} onChange={(e) => setCompany(e.target.value)} maxLength={40} placeholder="e.g. Northwind" />
+      {/* Company — org-wide brand, so only admins can change it. */}
+      {isAdmin && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><Building size={17} /> Company information</div>
+          <div className="card-sub">Shown as the brand in the sidebar, header and login screen — for everyone.</div>
+          <div className="field" style={{ maxWidth: 380, marginBottom: 0 }}>
+            <label className="field-label">Company name</label>
+            <input className="field-control" value={company} onChange={(e) => setCompany(e.target.value)} maxLength={40} placeholder="e.g. Northwind" />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Attendance policy — admins set the weekend days + holidays for the org. */}
       {isAdmin && (

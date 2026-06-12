@@ -45,7 +45,6 @@ function visibleIds(auth) {
   if (auth.role === "manager") return new Set([auth.sub, ...reportsOf(auth.sub).map((e) => e.id)]);
   return new Set([auth.sub]);
 }
-const canApprove = (auth) => auth.role === "admin" || auth.role === "manager";
 
 // "Aryan Jaiswal" -> "AJ"  (first letters of first two words, fallback to first 2 chars)
 function initials(name) {
@@ -138,7 +137,9 @@ app.get("/api/settings", (req, res) => {
 });
 
 // Update org settings: company name + attendance policy (weekend days, holidays).
-app.patch("/api/settings", requireAuth, (req, res) => {
+// Org-wide and shared by everyone, so admins only — a normal user must never be
+// able to change settings that would also change for the admin.
+app.patch("/api/settings", requireAuth, requireAdmin, (req, res) => {
   const { companyName, weekendDays, holidays } = req.body || {};
   if (companyName !== undefined) {
     const trimmed = String(companyName).trim();
