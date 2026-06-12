@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, CalendarClock, CalendarRange, Plane, Wallet, Network, Search, User, LogOut, Sun, Moon, Settings as SettingsIcon, Mail, Briefcase, Menu, X } from "lucide-react";
+import { LayoutDashboard, Users, CalendarClock, CalendarRange, Plane, Wallet, Network, User, LogOut, Sun, Moon, Settings as SettingsIcon, Mail, Briefcase, Menu, X } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
 import { useSettings } from "../settings/SettingsContext";
@@ -8,6 +8,7 @@ import { useAttendanceView } from "../attendance/AttendanceViewContext";
 import { SUMMARY_ITEMS, styleFor } from "../components/attendanceStatus";
 import { formatDuration } from "../utils/time";
 import Avatar from "../components/Avatar";
+import GlobalSearch from "../components/GlobalSearch";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -88,9 +89,24 @@ const ADMIN_NAV = [
   ]},
 ];
 
+// Managers get their own day plus team views (their direct reports only).
+const MANAGER_NAV = [
+  { group: "Me", items: [
+    { to: "/", label: "My Attendance", icon: CalendarClock, end: true },
+    { to: "/profile", label: "My Profile", icon: User },
+    { to: "/settings", label: "Settings", icon: SettingsIcon },
+  ]},
+  { group: "Team", items: [
+    { to: "/team", label: "My Team", icon: Network },
+    { to: "/attendance", label: "Team Attendance", icon: CalendarRange },
+    { to: "/leave", label: "Leave & Approvals", icon: Plane },
+  ]},
+];
+
 const EMPLOYEE_NAV = [
   { group: "Me", items: [
     { to: "/", label: "My Attendance", icon: CalendarClock, end: true },
+    { to: "/leave", label: "Leave", icon: Plane },
     { to: "/profile", label: "My Profile", icon: User },
     { to: "/settings", label: "Settings", icon: SettingsIcon },
   ]},
@@ -99,16 +115,16 @@ const EMPLOYEE_NAV = [
 const TITLES = {
   "/": "Dashboard", "/employees": "Employees", "/org": "Org Chart",
   "/attendance": "Attendance", "/leave": "Leave Management", "/payroll": "Payroll",
-  "/profile": "My Profile", "/settings": "Settings",
+  "/team": "My Team", "/profile": "My Profile", "/settings": "Settings",
 };
 
 export default function Layout({ children }) {
   const { pathname } = useLocation();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isManager, logout } = useAuth();
   const { mode, toggleMode } = useTheme();
   const { companyName } = useSettings();
   const { active: switchActive } = useAttendanceView();
-  const nav = isAdmin ? ADMIN_NAV : EMPLOYEE_NAV;
+  const nav = isAdmin ? ADMIN_NAV : isManager ? MANAGER_NAV : EMPLOYEE_NAV;
 
   // Make the floating header a touch more solid once the page is scrolled.
   const [scrolled, setScrolled] = useState(false);
@@ -176,10 +192,7 @@ export default function Layout({ children }) {
             <AttendanceSwitch />
           </div>
           <div className="topbar-right">
-            <div className="search">
-              <Search size={16} />
-              <input placeholder="Search people, requests…" />
-            </div>
+            <GlobalSearch />
             <button className="theme-toggle" onClick={toggleMode} title={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle theme">
               {mode === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>

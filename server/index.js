@@ -8,9 +8,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { load, save, DEFAULT_PASSWORD, dateKey } from "./db.js";
-import { signToken, requireAuth, requireAdmin, setAuthCookie, clearAuthCookie } from "./auth.js";
+import { signToken, requireAuth, requireAdmin, requireManagerOrAdmin, setAuthCookie, clearAuthCookie } from "./auth.js";
 import { todayRecord, isClockedIn, summarize } from "./attendance.js";
-import { monthlyForEmployee, monthlyForTeam } from "../shared/attendance.js";
+import { monthlyForEmployee, monthlyForTeam, applyRegularization } from "../shared/attendance.js";
+import { validateLeaveRequest } from "../shared/leave.js";
 
 const db = load();
 const app = express();
@@ -34,6 +35,17 @@ app.use(express.json({ limit: "6mb" })); // headroom for base64 profile images
 // Strip the password hash before sending an employee to the client.
 const publicEmployee = ({ passwordHash, ...rest }) => rest;
 const findEmployee = (id) => db.employees.find((e) => e.id === id);
+
+// ---- Role scoping (mirrors src/mockApi.js) ---------------------------------
+const reportsOf = (managerId) => db.employees.filter((e) => e.managerId === managerId);
+// Employee ids a user may see: admin → everyone; manager → self + reports;
+// employee → just themselves. Takes the JWT payload (req.auth).
+function visibleIds(auth) {
+  if (auth.role === "admin") return new Set(db.employees.map((e) => e.id));
+  if (auth.role === "manager") return new Set([auth.sub, ...reportsOf(auth.sub).map((e) => e.id)]);
+  return new Set([auth.sub]);
+}
+const canApprove = (auth) => auth.role === "admin" || auth.role === "manager";
 
 // "Aryan Jaiswal" -> "AJ"  (first letters of first two words, fallback to first 2 chars)
 function initials(name) {
@@ -255,9 +267,11 @@ app.get("/api/departments", requireAuth, (req, res) => {
   res.json(db.departments);
 });
 
-// Full directory — admins only.
-app.get("/api/employees", requireAuth, requireAdmin, (req, res) => {
-  res.json(db.employees.map(publicEmployee));
+// Directory scoped to the caller's role: admin → everyone; manager → self +
+// direct reports; employee → just themselves.
+app.get("/api/employees", requireAuth, (req, res) => {
+  const ids = visibleIds(req.auth);
+  res.json(db.employees.filter((e) => ids.has(e.id)).map(publicEmployee));
 });
 
 // Archive of admin-removed employees (with added/deleted dates) — admins only.
@@ -327,7 +341,8 @@ app.post("/api/attendance/clock-in", requireAuth, (req, res) => {
   if (isClockedIn(rec)) {
     return res.status(409).json({ error: "You are already clocked in" });
   }
-  rec.sessions.push({ in: new Date().toISOString(), out: null });
+  const location = req.body?.location === "remote" ? "remote" : "office";
+  rec.sessions.push({ in: new Date().toISOString(), out: null, location });
   save();
   res.json(summarize(rec.sessions, emp.targetHours));
 });
@@ -358,9 +373,11 @@ app.post("/api/attendance/reset", requireAuth, (req, res) => {
 
 // ---- Attendance: whole team (admin) ----------------------------------------
 
-// GET /api/attendance/today -> per-employee summary for the admin log
-app.get("/api/attendance/today", requireAuth, requireAdmin, (req, res) => {
-  const rows = db.employees.map((emp) => {
+// GET /api/attendance/today -> per-employee summary, scoped to who the caller
+// may see (admin → all; manager → self + reports; employee → self).
+app.get("/api/attendance/today", requireAuth, (req, res) => {
+  const ids = visibleIds(req.auth);
+  const rows = db.employees.filter((e) => ids.has(e.id)).map((emp) => {
     const rec = todayRecord(db, emp.id);
     const s = summarize(rec?.sessions || [], emp.targetHours);
     return {
@@ -395,60 +412,108 @@ app.get("/api/attendance/monthly", requireAuth, (req, res) => {
   }));
 });
 
-// GET /api/attendance/monthly/team -> per-employee totals + weekend list (admin).
-// Includes former (deleted) employees, bounded by their deletion date, so the
-// admin keeps the complete attendance history for auditing.
-app.get("/api/attendance/monthly/team", requireAuth, requireAdmin, (req, res) => {
+// GET /api/attendance/monthly/team -> per-employee totals + weekend list.
+// Admin sees everyone (plus former employees, bounded by their deletion date,
+// for complete history); a manager sees only their direct reports.
+app.get("/api/attendance/monthly/team", requireAuth, requireManagerOrAdmin, (req, res) => {
   const { year, month } = parseMonth(req);
-  const formers = (db.deletedEmployees || []).map((d) => ({
-    ...d, endDate: dateKey(new Date(d.deletedAt)), deleted: true,
-  }));
+  const roster = req.auth.role === "admin"
+    ? [...db.employees, ...(db.deletedEmployees || []).map((d) => ({
+        ...d, endDate: dateKey(new Date(d.deletedAt)), deleted: true,
+      }))]
+    : reportsOf(req.auth.sub);
   res.json(monthlyForTeam({
-    year, month, employees: [...db.employees, ...formers],
+    year, month, employees: roster,
     records: db.attendance, leaves: db.leaves, settings: db.settings,
   }));
 });
 
 // ---- Leaves ----------------------------------------------------------------
 
-// Admins see all requests; employees see only their own.
+// Scoped: admin → all; manager → self + reports; employee → own.
 app.get("/api/leaves", requireAuth, (req, res) => {
-  if (req.auth.role === "admin") return res.json(db.leaves);
-  res.json(db.leaves.filter((l) => l.employeeId === req.auth.sub));
+  const ids = visibleIds(req.auth);
+  res.json(db.leaves.filter((l) => ids.has(l.employeeId)));
 });
 
-// Apply for leave (any authenticated user, for themselves).
+// Apply for leave (any authenticated user, for themselves). Validated against
+// dates, overlaps and remaining balance via the shared leave policy.
 app.post("/api/leaves", requireAuth, (req, res) => {
-  const { type, from, to, days, reason } = req.body || {};
-  if (!type || !from || !to) {
-    return res.status(400).json({ error: "type, from and to are required" });
-  }
+  const { type, from, to, reason } = req.body || {};
+  const mine = db.leaves.filter((l) => l.employeeId === req.auth.sub);
+  const check = validateLeaveRequest(mine, req.auth.sub, { type, from, to });
+  if (!check.ok) return res.status(400).json({ error: check.error });
   const leave = {
-    id: db._nextLeaveId++,
-    employeeId: req.auth.sub,
-    type,
-    from,
-    to,
-    days: Number(days) || 1,
-    status: "Pending",
-    reason: reason || "",
+    id: db._nextLeaveId++, employeeId: req.auth.sub,
+    type, from, to, days: check.days, status: "Pending", reason: reason || "",
   };
   db.leaves.push(leave);
   save();
   res.status(201).json(leave);
 });
 
-// Approve / reject — admins only.
-app.patch("/api/leaves/:id", requireAuth, requireAdmin, (req, res) => {
+// Approve / reject — admins (any request) and managers (their reports only).
+app.patch("/api/leaves/:id", requireAuth, requireManagerOrAdmin, (req, res) => {
   const { status } = req.body || {};
   if (!["Approved", "Rejected", "Pending"].includes(status)) {
     return res.status(400).json({ error: "Invalid status" });
   }
   const leave = db.leaves.find((l) => l.id === Number(req.params.id));
   if (!leave) return res.status(404).json({ error: "Leave not found" });
+  if (leave.employeeId === req.auth.sub) return res.status(403).json({ error: "You can't approve your own leave" });
+  if (req.auth.role === "manager" && !reportsOf(req.auth.sub).some((r) => r.id === leave.employeeId)) {
+    return res.status(403).json({ error: "That request isn't from one of your reports" });
+  }
   leave.status = status;
   save();
   res.json(leave);
+});
+
+// ---- Attendance regularizations --------------------------------------------
+
+// Scoped list: admin → all; manager → self + reports; employee → own.
+app.get("/api/regularizations", requireAuth, (req, res) => {
+  const ids = visibleIds(req.auth);
+  res.json((db.regularizations || []).filter((r) => ids.has(r.employeeId)));
+});
+
+// Request a correction for a past day (forgot to punch, wrong time, etc.).
+app.post("/api/regularizations", requireAuth, (req, res) => {
+  const { date, in: inTime, out: outTime, reason } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return res.status(400).json({ error: "A valid date is required" });
+  if (date > dateKey()) return res.status(400).json({ error: "You can only regularize a past day" });
+  if (!inTime || !outTime) return res.status(400).json({ error: "Both a clock-in and clock-out time are required" });
+  if (new Date(outTime) <= new Date(inTime)) return res.status(400).json({ error: "Clock-out must be after clock-in" });
+  db.regularizations = db.regularizations || [];
+  if (db.regularizations.some((r) => r.employeeId === req.auth.sub && r.date === date && r.status === "Pending")) {
+    return res.status(409).json({ error: "You already have a pending request for that day" });
+  }
+  const reg = {
+    id: db._nextRegId++, employeeId: req.auth.sub, date,
+    in: inTime, out: outTime, reason: reason || "", status: "Pending",
+  };
+  db.regularizations.push(reg);
+  save();
+  res.status(201).json(reg);
+});
+
+// Approve / reject a regularization — admins (any) and managers (their reports).
+// Approving rewrites that day's attendance with the corrected session.
+app.patch("/api/regularizations/:id", requireAuth, requireManagerOrAdmin, (req, res) => {
+  const { status } = req.body || {};
+  if (!["Approved", "Rejected", "Pending"].includes(status)) {
+    return res.status(400).json({ error: "Invalid status" });
+  }
+  const reg = (db.regularizations || []).find((r) => r.id === Number(req.params.id));
+  if (!reg) return res.status(404).json({ error: "Request not found" });
+  if (reg.employeeId === req.auth.sub) return res.status(403).json({ error: "You can't approve your own request" });
+  if (req.auth.role === "manager" && !reportsOf(req.auth.sub).some((r) => r.id === reg.employeeId)) {
+    return res.status(403).json({ error: "That request isn't from one of your reports" });
+  }
+  reg.status = status;
+  if (status === "Approved") applyRegularization(db.attendance, reg);
+  save();
+  res.json(reg);
 });
 
 // ---- Serve the built frontend (single-origin deploy) -----------------------

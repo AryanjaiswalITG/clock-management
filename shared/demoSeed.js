@@ -3,7 +3,7 @@
 // password representation (mock: plaintext; server: bcrypt hash).
 //
 // Bump SEED_VERSION when this data changes to re-seed existing browsers.
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
 
 export const DEMO_DEPARTMENTS = [
   { id: 1, name: "Engineering" },
@@ -15,8 +15,11 @@ export const DEMO_DEPARTMENTS = [
 
 // Every demo account uses the password "password123".
 // halfDayCutoff "13:00"/"13:30" enables the auto Half-Day rule for some people.
+// Aryan is a MANAGER (role "manager"): Ananya (id 6) reports to him, so the
+// manager experience — team view + approving a report's leave/regularization —
+// has real data behind it on the demo.
 export const DEMO_EMPLOYEES = [
-  { id: 1, name: "Aryan Jaiswal", designation: "Developer", deptId: 1, managerId: 2, email: "aryanjaiswal@demo.do", joinDate: "2024-01-15", status: "Active", avatar: "AJ", avatarUrl: null, role: "employee", targetHours: 8, halfDayCutoff: "13:00" },
+  { id: 1, name: "Aryan Jaiswal", designation: "Engineering Lead", deptId: 1, managerId: 2, email: "aryanjaiswal@demo.do", joinDate: "2024-01-15", status: "Active", avatar: "AJ", avatarUrl: null, role: "manager", targetHours: 8, halfDayCutoff: "13:00" },
   { id: 2, name: "Meera Nair", designation: "HR Manager", deptId: 3, managerId: null, email: "admin@demo.do", joinDate: "2022-03-01", status: "Active", avatar: "MN", avatarUrl: null, role: "admin", targetHours: 8, halfDayCutoff: null },
   { id: 3, name: "Kabir Singh", designation: "Product Designer", deptId: 2, managerId: 2, email: "kabir@demo.do", joinDate: "2023-06-10", status: "Active", avatar: "KS", avatarUrl: null, role: "employee", targetHours: 8, halfDayCutoff: "13:00" },
   { id: 4, name: "Diya Sharma", designation: "Sales Executive", deptId: 4, managerId: 2, email: "diya@demo.do", joinDate: "2023-09-05", status: "Active", avatar: "DS", avatarUrl: null, role: "employee", targetHours: 8, halfDayCutoff: null },
@@ -56,24 +59,64 @@ export function buildDemoAttendance(today = new Date()) {
   return records;
 }
 
-// A couple of leave requests in the current month: one Approved (shows as
-// "Leave" on the calendar) and one Pending (shows in admin approvals).
+// Nearest weekday on/before a given day-of-month (so demo dates never land on a
+// weekend, which would otherwise mask the status we're trying to show).
+function pastWeekday(y, mo, day) {
+  let d = new Date(y, mo, day);
+  while (d.getMonth() === mo && (d.getDay() === 0 || d.getDay() === 6)) d.setDate(d.getDate() - 1);
+  return dstr(y, mo, d.getDate());
+}
+
+// Demo leave requests spanning a few types/statuses so balances and approvals
+// have real data: approved leave (shows on the calendar), a pending request for
+// the admin queue, and a pending request from a manager's direct report.
 export function buildDemoLeaves(today = new Date()) {
   const y = today.getFullYear();
   const mo = today.getMonth();
+  const soon = (n) => dstr(y, mo, Math.min(28, today.getDate() + n));
   return [
     { id: 1, employeeId: 4, type: "Casual", from: dstr(y, mo, 2), to: dstr(y, mo, 3), days: 2, status: "Approved", reason: "Family function" },
-    { id: 2, employeeId: 3, type: "Sick", from: dstr(y, mo, Math.min(28, today.getDate() + 2)), to: dstr(y, mo, Math.min(28, today.getDate() + 2)), days: 1, status: "Pending", reason: "Doctor visit" },
+    { id: 2, employeeId: 3, type: "Sick", from: soon(2), to: soon(2), days: 1, status: "Pending", reason: "Doctor visit" },
+    { id: 3, employeeId: 6, type: "Casual", from: soon(4), to: soon(5), days: 2, status: "Pending", reason: "Personal work" }, // Ananya → manager Aryan approves
+    { id: 4, employeeId: 1, type: "Annual", from: dstr(y, mo, 8), to: dstr(y, mo, 9), days: 2, status: "Approved", reason: "Short break" },
   ];
 }
 
-// Full demo dataset (profiles + attendance + leaves), minus passwords.
+// Two company holidays this month so the holiday calendar isn't empty.
+export function buildDemoHolidays(today = new Date()) {
+  const y = today.getFullYear();
+  const mo = today.getMonth();
+  return [...new Set([dstr(y, mo, 15), dstr(y, mo, Math.min(28, today.getDate() + 9))])].sort();
+}
+
+// One pending attendance-regularization (a report forgot to clock out) so the
+// manager/admin approval flow has something to act on.
+export function buildDemoRegularizations(today = new Date()) {
+  const y = today.getFullYear();
+  const mo = today.getMonth();
+  const date = pastWeekday(y, mo, Math.max(1, today.getDate() - 3));
+  return [
+    {
+      id: 1, employeeId: 6, date,
+      in: new Date(`${date}T09:15:00`).toISOString(),
+      out: new Date(`${date}T18:00:00`).toISOString(),
+      reason: "Forgot to clock out — was in the office until 6pm.",
+      status: "Pending",
+    },
+  ];
+}
+
+// Full demo dataset (profiles + attendance + leaves + holidays + regularizations),
+// minus passwords.
 export function buildDemoData(today = new Date()) {
   return {
     departments: DEMO_DEPARTMENTS,
     employees: DEMO_EMPLOYEES,
     attendance: buildDemoAttendance(today),
     leaves: buildDemoLeaves(today),
-    _nextLeaveId: 3,
+    holidays: buildDemoHolidays(today),
+    regularizations: buildDemoRegularizations(today),
+    _nextLeaveId: 5,
+    _nextRegId: 2,
   };
 }

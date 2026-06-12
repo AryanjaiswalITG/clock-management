@@ -3,15 +3,18 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { CalendarRange, CalendarDays } from "lucide-react";
 import { api } from "../api";
 import { useData } from "../data/DataContext";
+import { useAuth } from "../auth/AuthContext";
 import { formatClock, formatDuration } from "../utils/time";
 import Badge from "../components/Badge";
 import MonthPicker from "../components/MonthPicker";
+import RegularizationApprovals from "../components/RegularizationApprovals";
 import { SUMMARY_ITEMS, styleFor } from "../components/attendanceStatus";
 
 const TODAY = new Date();
 const CUR_MONTH = { year: TODAY.getFullYear(), month: TODAY.getMonth() + 1 };
 
 export default function Attendance() {
+  const { isAdmin } = useAuth();
   const { attendanceToday, empName, empAvatar, empById, deptName } = useData();
   const [now, setNow] = useState(new Date());
   const [month, setMonth] = useState(CUR_MONTH);
@@ -91,6 +94,9 @@ export default function Attendance() {
           </tbody>
         </table>
       </div>
+
+      {/* Regularization approvals (admins; managers handle these on the Team page) */}
+      {isAdmin && <RegularizationApprovals />}
 
       {/* ---- Monthly report header ---- */}
       <div className="section-head" style={{ marginBottom: 12 }}>

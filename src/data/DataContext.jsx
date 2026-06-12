@@ -11,6 +11,7 @@ export function DataProvider({ children }) {
   const [employees, setEmployees] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [attendanceToday, setAttendanceToday] = useState([]);
+  const [regularizations, setRegularizations] = useState([]);
   const [deletedEmployees, setDeletedEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -19,18 +20,20 @@ export function DataProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const [depts, emps, lvs, att, del] = await Promise.all([
+      const [depts, emps, lvs, att, regs] = await Promise.all([
         api.departments(),
         api.employees(),
         api.leaves(),
         api.attendanceToday(),
-        api.deletedEmployees(),
+        api.regularizations(),
       ]);
       setDepartments(depts);
       setEmployees(emps);
       setLeaves(lvs);
       setAttendanceToday(att);
-      setDeletedEmployees(del);
+      setRegularizations(regs);
+      // Admin-only archive; non-admins get 403 — fall back to empty.
+      setDeletedEmployees(await api.deletedEmployees().catch(() => []));
     } catch (e) {
       setError(e.message || "Failed to load data");
     } finally {
@@ -53,6 +56,13 @@ export function DataProvider({ children }) {
     await refresh();
   }, [refresh]);
 
+  // Apply for a leave request, then reload so it shows up in the list.
+  const applyLeave = useCallback(async (payload) => {
+    const leave = await api.applyLeave(payload);
+    await refresh();
+    return leave;
+  }, [refresh]);
+
   // Optimistic leave status change, persisted to the backend.
   const setLeaveStatus = useCallback(async (id, status) => {
     setLeaves((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
@@ -61,6 +71,20 @@ export function DataProvider({ children }) {
     } catch {
       refresh(); // roll back to server truth on failure
     }
+  }, [refresh]);
+
+  // Request an attendance regularization, then reload.
+  const applyRegularization = useCallback(async (payload) => {
+    const reg = await api.applyRegularization(payload);
+    await refresh();
+    return reg;
+  }, [refresh]);
+
+  // Approve/reject a regularization. Approving rewrites that day's attendance on
+  // the backend, so reload to pick up the new numbers.
+  const setRegularizationStatus = useCallback(async (id, status) => {
+    await api.setRegularizationStatus(id, status);
+    await refresh();
   }, [refresh]);
 
   const value = useMemo(() => {
@@ -73,11 +97,11 @@ export function DataProvider({ children }) {
       value: employees.filter((e) => e.deptId === d.id).length,
     }));
     return {
-      departments, employees, leaves, attendanceToday, deletedEmployees, loading, error,
-      refresh, setLeaveStatus, createEmployee, deleteEmployees,
+      departments, employees, leaves, attendanceToday, regularizations, deletedEmployees, loading, error,
+      refresh, setLeaveStatus, applyLeave, applyRegularization, setRegularizationStatus, createEmployee, deleteEmployees,
       deptName, empById, empName, empAvatar, headcountByDept,
     };
-  }, [departments, employees, leaves, attendanceToday, deletedEmployees, loading, error, refresh, setLeaveStatus, createEmployee, deleteEmployees]);
+  }, [departments, employees, leaves, attendanceToday, regularizations, deletedEmployees, loading, error, refresh, setLeaveStatus, applyLeave, applyRegularization, setRegularizationStatus, createEmployee, deleteEmployees]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

@@ -33,7 +33,10 @@ export default function Dashboard() {
   if (loading) return <div style={{ color: "var(--ink-soft)" }}>Loading dashboard…</div>;
 
   const present = attendanceToday.filter((a) => a.status === "Present" || a.status === "Working").length;
-  const onLeave = employees.filter((e) => e.status === "On Leave").length;
+  // "On leave today" = anyone with an approved leave whose range covers today.
+  // (Employees carry status "Active", never "On Leave", so the old check was always 0.)
+  const today = new Date().toISOString().slice(0, 10);
+  const onLeave = leaves.filter((l) => l.status === "Approved" && l.from <= today && l.to >= today).length;
   const pending = leaves.filter((l) => l.status === "Pending");
   const headcount = employees.length || 1;
 
@@ -42,7 +45,7 @@ export default function Dashboard() {
       <div className="grid cols-4" style={{ marginBottom: 18 }}>
         <Stat icon={Users} label="Total Employees" value={employees.length} delta="+2 this quarter" tone="up" />
         <Stat icon={UserCheck} label="Present Today" value={present} delta={`${Math.round(present / headcount * 100)}% of team`} tone="up" />
-        <Stat icon={Plane} label="On Leave" value={onLeave} delta="1 returning Mon" tone="up" />
+        <Stat icon={Plane} label="On Leave" value={onLeave} delta={onLeave ? "Out today" : "Everyone in"} tone="up" />
         <Stat icon={Clock} label="Pending Approvals" value={pending.length} delta="Needs your action" tone="down" />
       </div>
 

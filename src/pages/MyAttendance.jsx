@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { LogIn, LogOut, Clock, Coffee, Target, CheckCircle2, AlertCircle, RotateCcw, X, CalendarRange, CalendarDays } from "lucide-react";
+import { LogIn, LogOut, Clock, Coffee, Target, CheckCircle2, AlertCircle, RotateCcw, X, CalendarRange, CalendarDays, Building2, Home, FileClock, PartyPopper } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import { useSettings } from "../settings/SettingsContext";
 import { formatDuration, formatHMS, formatClock, formatClockSec, formatHMSColon, formatCutoff } from "../utils/time";
 import MonthCalendar from "../components/MonthCalendar";
 import MonthPicker from "../components/MonthPicker";
@@ -41,6 +42,11 @@ function DetailRow({ label, value }) {
 
 const TODAY = new Date();
 const CUR_MONTH = { year: TODAY.getFullYear(), month: TODAY.getMonth() + 1 };
+const pad2 = (n) => String(n).padStart(2, "0");
+const TODAY_STR = `${TODAY.getFullYear()}-${pad2(TODAY.getMonth() + 1)}-${pad2(TODAY.getDate())}`;
+// A past working day can be regularized (a forgotten/incorrect punch).
+const REGULARIZABLE = ["Present", "Half Day", "Absent"];
+const isoToHM = (iso) => (iso ? new Date(iso).toTimeString().slice(0, 5) : "");
 
 // Mirror of the server's summarize() so the worked/away numbers tick live
 // every second while clocked in (server stays the source of truth on each action).
@@ -84,6 +90,7 @@ function StatCard({ icon: Icon, label, value, sub, tone }) {
 
 export default function MyAttendance() {
   const { user } = useAuth();
+  const { holidays } = useSettings();
   // view ("daily" | "monthly") + the header's monthly-summary popup are driven
   // from the shared AttendanceView context, controlled by the header switch.
   const { view, setMonthly: publishMonthly, setActive } = useAttendanceView();
@@ -98,6 +105,16 @@ export default function MyAttendance() {
   // Detail-drawer selection: { kind:"day", day } | { kind:"status", item } | null
   const [selected, setSelected] = useState(null);
   const [depts, setDepts] = useState([]);
+  // Where I'm working today — chosen before clocking in (office | remote).
+  const [location, setLocation] = useState("office");
+  // My own attendance-regularization requests + the request modal.
+  const [regs, setRegs] = useState([]);
+  const [regForm, setRegForm] = useState(null); // { date, in, out, reason } | null
+  const [regBusy, setRegBusy] = useState(false);
+  const [regError, setRegError] = useState(null);
+
+  // Upcoming company holidays (today onward) for the holiday card.
+  const upcomingHolidays = (holidays || []).filter((h) => h >= TODAY_STR).sort().slice(0, 6);
 
   // Department name for the "responsible person" block (read-only).
   useEffect(() => { api.departments().then(setDepts).catch(() => {}); }, []);
@@ -132,6 +149,12 @@ export default function MyAttendance() {
 
   useEffect(() => { loadMonthly(); }, [loadMonthly]);
 
+  // My regularization requests (own only, via the scoped endpoint).
+  const loadRegs = useCallback(async () => {
+    try { setRegs(await api.regularizations()); } catch { /* keep previous on error */ }
+  }, []);
+  useEffect(() => { loadRegs(); }, [loadRegs]);
+
   // 1s tick so the live clock and worked timer update.
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -142,7 +165,7 @@ export default function MyAttendance() {
     setBusy(true);
     setError(null);
     try {
-      const next = action === "in" ? await api.clockIn() : await api.clockOut();
+      const next = action === "in" ? await api.clockIn(location) : await api.clockOut();
       setSummary(next);
       loadMonthly(); // today's status may have changed
     } catch (e) {
@@ -151,6 +174,41 @@ export default function MyAttendance() {
       setBusy(false);
     }
   }
+
+  // Open the regularization modal for a day, prefilling with any existing punches.
+  function openReg(date) {
+    const day = monthly?.days.find((d) => d.date === date);
+    setRegError(null);
+    setRegForm({
+      date,
+      in: isoToHM(day?.firstIn) || "09:00",
+      out: isoToHM(day?.lastOut) || "18:00",
+      reason: "",
+    });
+  }
+
+  async function submitReg(e) {
+    e.preventDefault();
+    setRegError(null);
+    if (!regForm.in || !regForm.out) { setRegError("Enter both a clock-in and clock-out time."); return; }
+    const inIso = new Date(`${regForm.date}T${regForm.in}:00`).toISOString();
+    const outIso = new Date(`${regForm.date}T${regForm.out}:00`).toISOString();
+    if (new Date(outIso) <= new Date(inIso)) { setRegError("Clock-out must be after clock-in."); return; }
+    setRegBusy(true);
+    try {
+      await api.applyRegularization({ date: regForm.date, in: inIso, out: outIso, reason: regForm.reason });
+      setRegForm(null);
+      setSelected(null);
+      loadRegs();
+    } catch (err) {
+      setRegError(err.message);
+    } finally {
+      setRegBusy(false);
+    }
+  }
+
+  // Is there already a pending request for this day?
+  const pendingRegFor = (date) => regs.find((r) => r.date === date && r.status === "Pending");
 
   // Wipe today's sessions and restart the target timer from zero.
   async function doReset() {
@@ -200,6 +258,28 @@ export default function MyAttendance() {
               {live.clockedIn ? "● Clocked in" : "Clocked out"}
             </span>
           </div>
+
+          {/* Where am I working today? Chosen before clocking in. Once clocked
+              in the day's location is fixed, so we show it instead of the toggle. */}
+          {!live.clockedIn ? (
+            <div className="loc-toggle" role="group" aria-label="Work location" style={{ marginBottom: 16 }}>
+              <button type="button" className={location === "office" ? "active" : ""} onClick={() => setLocation("office")}>
+                <Building2 size={14} /> Office
+              </button>
+              <button type="button" className={location === "remote" ? "active" : ""} onClick={() => setLocation("remote")}>
+                <Home size={14} /> Remote
+              </button>
+            </div>
+          ) : (
+            summary.sessions.some((s) => s.location) && (
+              <div style={{ marginBottom: 16, fontSize: 13, color: "var(--panel-ink-soft)", display: "flex", alignItems: "center", gap: 6 }}>
+                {summary.sessions[summary.sessions.length - 1]?.location === "remote"
+                  ? <><Home size={14} /> Working remotely</>
+                  : <><Building2 size={14} /> Working from office</>}
+              </div>
+            )
+          )}
+
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
             {!live.clockedIn ? (
               <button className="btn primary" style={{ fontSize: 15, padding: "12px 28px" }} disabled={busy || resetting}
@@ -280,10 +360,10 @@ export default function MyAttendance() {
           <div className="card-sub">Every clock-in and clock-out, {user?.name}</div>
         </div>
         <table>
-          <thead><tr><th>#</th><th>Clock In</th><th>Clock Out</th><th>Duration</th><th>Status</th></tr></thead>
+          <thead><tr><th>#</th><th>Clock In</th><th>Clock Out</th><th>Duration</th><th>Where</th><th>Status</th></tr></thead>
           <tbody>
             {summary.sessions.length === 0 && (
-              <tr><td colSpan={5} style={{ color: "var(--ink-soft)", textAlign: "center", padding: "24px" }}>No sessions yet — clock in to start your day.</td></tr>
+              <tr><td colSpan={6} style={{ color: "var(--ink-soft)", textAlign: "center", padding: "24px" }}>No sessions yet — clock in to start your day.</td></tr>
             )}
             {summary.sessions.map((s, i) => {
               const open = s.out === null;
@@ -298,12 +378,27 @@ export default function MyAttendance() {
                   <td>{formatClockSec(s.in)}</td>
                   <td>{open ? "—" : formatClockSec(s.out)}</td>
                   <td style={{ fontVariantNumeric: "tabular-nums" }} title={`${Math.floor(dur)} seconds`}>{formatHMSColon(dur)}</td>
+                  <td><span className={`badge ${s.location === "remote" ? "violet" : "teal"}`}>{s.location === "remote" ? "Remote" : "Office"}</span></td>
                   <td><span className={`badge ${open ? "green" : "gray"}`}>{open ? "Active" : "Closed"}</span></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Upcoming company holidays — so you can plan around non-working days. */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><PartyPopper size={17} /> Upcoming Holidays</div>
+        <div className="card-sub">Company holidays coming up — non-working days</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+          {upcomingHolidays.length === 0 && <span style={{ fontSize: 13, color: "var(--ink-soft)" }}>No upcoming holidays configured.</span>}
+          {upcomingHolidays.map((d) => (
+            <span key={d} className="badge teal">
+              {new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })}
+            </span>
+          ))}
+        </div>
       </div>
       </div>
       )}
@@ -375,6 +470,29 @@ export default function MyAttendance() {
           </div>
         </div>
       )}
+
+      {/* ---- My regularization requests ---- */}
+      {regs.length > 0 && (
+        <div className="card" style={{ marginTop: 18, padding: 0 }}>
+          <div style={{ padding: "18px 20px 6px" }}>
+            <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><FileClock size={17} /> My Regularization Requests</div>
+            <div className="card-sub">Attendance corrections you've requested</div>
+          </div>
+          <table>
+            <thead><tr><th>Day</th><th>Requested in / out</th><th>Reason</th><th>Status</th></tr></thead>
+            <tbody>
+              {[...regs].sort((a, b) => b.date.localeCompare(a.date)).map((r) => (
+                <tr key={r.id}>
+                  <td>{new Date(`${r.date}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{formatClock(r.in)} → {formatClock(r.out)}</td>
+                  <td style={{ color: "var(--ink-soft)" }}>{r.reason || "—"}</td>
+                  <td><Badge status={r.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       </div>
       )}
 
@@ -416,6 +534,14 @@ export default function MyAttendance() {
                     <DetailRow label="Employee ID" value={`#${String(user.id).padStart(4, "0")}`} />
                   </div>
                   <div className="dd-note">{statusNote(day.status, user.halfDayCutoff)}</div>
+                  {/* Regularization: fix a past working day's punches (manager approves). */}
+                  {day.date < TODAY_STR && REGULARIZABLE.includes(day.status) && (
+                    pendingRegFor(day.date)
+                      ? <div className="dd-note" style={{ color: "var(--amber)" }}>A regularization request for this day is pending approval.</div>
+                      : <button className="btn ghost" style={{ marginTop: 14, width: "100%", justifyContent: "center" }} onClick={() => openReg(day.date)}>
+                          <FileClock size={15} style={{ marginRight: 8, verticalAlign: "-3px" }} /> Request regularization
+                        </button>
+                  )}
                 </>
               );
             })()}
@@ -449,6 +575,38 @@ export default function MyAttendance() {
           </>
         )}
       </DetailDrawer>
+
+      {/* Regularization request modal */}
+      {regForm && (
+        <div className="modal-overlay" onClick={() => !regBusy && setRegForm(null)}>
+          <form className="modal modal-form" onClick={(e) => e.stopPropagation()} onSubmit={submitReg}>
+            <button type="button" className="modal-close" onClick={() => setRegForm(null)} disabled={regBusy} aria-label="Close"><X size={18} /></button>
+            <div className="modal-title" style={{ textAlign: "left" }}>Request regularization</div>
+            <div className="modal-message" style={{ textAlign: "left", margin: "6px 0 16px" }}>
+              Correct your attendance for {new Date(`${regForm.date}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}. Your manager reviews and approves it.
+            </div>
+            {regError && <div className="form-error">{regError}</div>}
+            <div className="field-row">
+              <div className="field">
+                <label className="field-label">Clock in</label>
+                <input type="time" className="field-control" value={regForm.in} onChange={(e) => setRegForm({ ...regForm, in: e.target.value })} required />
+              </div>
+              <div className="field">
+                <label className="field-label">Clock out</label>
+                <input type="time" className="field-control" value={regForm.out} onChange={(e) => setRegForm({ ...regForm, out: e.target.value })} required />
+              </div>
+            </div>
+            <div className="field">
+              <label className="field-label">Reason</label>
+              <input className="field-control" value={regForm.reason} placeholder="e.g. Forgot to clock out" onChange={(e) => setRegForm({ ...regForm, reason: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+              <button type="button" className="btn ghost" onClick={() => setRegForm(null)} disabled={regBusy}>Cancel</button>
+              <button type="submit" className="btn primary" disabled={regBusy}>{regBusy ? "Submitting…" : "Submit request"}</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Reset confirmation — guards against accidental clicks. */}
       {confirmReset && (

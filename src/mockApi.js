@@ -6,7 +6,9 @@
 
 import {
   dateKey, summarize, monthlyForEmployee, monthlyForTeam, DEFAULT_WEEKEND_DAYS,
+  applyRegularization,
 } from "../shared/attendance.js";
+import { validateLeaveRequest } from "../shared/leave.js";
 import { buildDemoData, SEED_VERSION } from "../shared/demoSeed.js";
 
 const DB_KEY = "nw_mock_db";
@@ -32,9 +34,11 @@ function seedDatabase() {
     employees: data.employees.map((e) => ({ ...e, password: DEFAULT_PASSWORD })),
     leaves: data.leaves,
     attendance: data.attendance,
+    regularizations: data.regularizations,
     deletedEmployees: [], // archive of admin-removed employees
-    settings: { companyName: "Northwind", weekendDays: DEFAULT_WEEKEND_DAYS, holidays: [] },
+    settings: { companyName: "Northwind", weekendDays: DEFAULT_WEEKEND_DAYS, holidays: data.holidays },
     _nextLeaveId: data._nextLeaveId,
+    _nextRegId: data._nextRegId,
     _seedVersion: SEED_VERSION,
   };
 }
@@ -57,6 +61,8 @@ function loadDb() {
   if (!Array.isArray(db.settings.weekendDays)) { db.settings.weekendDays = DEFAULT_WEEKEND_DAYS; migrated = true; }
   if (!Array.isArray(db.settings.holidays)) { db.settings.holidays = []; migrated = true; }
   if (!Array.isArray(db.deletedEmployees)) { db.deletedEmployees = []; migrated = true; }
+  if (!Array.isArray(db.regularizations)) { db.regularizations = []; migrated = true; }
+  if (typeof db._nextRegId !== "number") { db._nextRegId = 1; migrated = true; }
   for (const e of db.employees) {
     if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
   }
@@ -99,6 +105,18 @@ export function createMockApi(ApiError) {
     if (!u) throw new ApiError("Not authenticated", 401);
     return u;
   }
+
+  // ---- Role scoping ---------------------------------------------------------
+  const reportsOf = (db, managerId) => db.employees.filter((e) => e.managerId === managerId);
+  // The set of employee ids a user may see: admin → everyone; manager → self +
+  // direct reports; employee → just themselves.
+  function visibleIds(db, user) {
+    if (user.role === "admin") return new Set(db.employees.map((e) => e.id));
+    if (user.role === "manager") return new Set([user.id, ...reportsOf(db, user.id).map((e) => e.id)]);
+    return new Set([user.id]);
+  }
+  // Managers + admins can approve requests; the rest cannot.
+  const canApprove = (user) => user.role === "admin" || user.role === "manager";
 
   return {
     async login(email, password) {
@@ -256,11 +274,14 @@ export function createMockApi(ApiError) {
 
     async departments() { await delay(40); const db = loadDb(); requireUser(db); return db.departments; },
 
+    // Directory scoped to the caller's role: admin → everyone; manager → self +
+    // direct reports; employee → just themselves.
     async employees() {
       await delay();
       const db = loadDb();
-      requireUser(db);
-      return db.employees.map(publicEmployee);
+      const me = requireUser(db);
+      const ids = visibleIds(db, me);
+      return db.employees.filter((e) => ids.has(e.id)).map(publicEmployee);
     },
 
     // Admin creates an employee (same fields as signup). Does NOT change the
@@ -331,13 +352,14 @@ export function createMockApi(ApiError) {
       return summarize(rec?.sessions || [], emp.targetHours);
     },
 
-    async clockIn() {
+    async clockIn(location = "office") {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
+      const loc = location === "remote" ? "remote" : "office";
       const rec = todayRecord(db, emp.id, { create: true });
       if (isClockedIn(rec)) throw new ApiError("You are already clocked in", 409);
-      rec.sessions.push({ in: new Date().toISOString(), out: null });
+      rec.sessions.push({ in: new Date().toISOString(), out: null, location: loc });
       saveDb(db);
       return summarize(rec.sessions, emp.targetHours);
     },
@@ -364,11 +386,13 @@ export function createMockApi(ApiError) {
       return summarize(rec?.sessions || [], emp.targetHours);
     },
 
+    // Today's per-employee log, scoped to who the caller may see.
     async attendanceToday() {
       await delay();
       const db = loadDb();
-      requireUser(db);
-      return db.employees.map((emp) => {
+      const me = requireUser(db);
+      const ids = visibleIds(db, me);
+      return db.employees.filter((e) => ids.has(e.id)).map((emp) => {
         const rec = todayRecord(db, emp.id);
         const s = summarize(rec?.sessions || [], emp.targetHours);
         return {
@@ -399,34 +423,42 @@ export function createMockApi(ApiError) {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
-      if (emp.role !== "admin") throw new ApiError("Admins only", 403);
+      if (!canApprove(emp)) throw new ApiError("Managers or admins only", 403);
       const now = new Date();
-      const formers = (db.deletedEmployees || []).map((d) => ({
-        ...d, endDate: dateKey(new Date(d.deletedAt)), deleted: true,
-      }));
+      // Admin sees everyone (plus former employees for history); a manager sees
+      // only their own reports.
+      const roster = emp.role === "admin"
+        ? [...db.employees, ...(db.deletedEmployees || []).map((d) => ({
+            ...d, endDate: dateKey(new Date(d.deletedAt)), deleted: true,
+          }))]
+        : reportsOf(db, emp.id);
       return monthlyForTeam({
         year: year || now.getFullYear(),
         month: month || now.getMonth() + 1,
-        employees: [...db.employees, ...formers], records: db.attendance, leaves: db.leaves, settings: db.settings,
+        employees: roster, records: db.attendance, leaves: db.leaves, settings: db.settings,
       });
     },
 
+    // Admin → all; manager → self + reports; employee → own.
     async leaves() {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
-      return emp.role === "admin" ? db.leaves : db.leaves.filter((l) => l.employeeId === emp.id);
+      const ids = visibleIds(db, emp);
+      return db.leaves.filter((l) => ids.has(l.employeeId));
     },
 
     async applyLeave(payload = {}) {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
-      const { type, from, to, days, reason } = payload;
-      if (!type || !from || !to) throw new ApiError("type, from and to are required", 400);
+      const { type, from, to, reason } = payload;
+      // Validate dates, overlaps and remaining balance against this user's leaves.
+      const check = validateLeaveRequest(db.leaves.filter((l) => l.employeeId === emp.id), emp.id, { type, from, to });
+      if (!check.ok) throw new ApiError(check.error, 400);
       const leave = {
         id: db._nextLeaveId++, employeeId: emp.id, type, from, to,
-        days: Number(days) || 1, status: "Pending", reason: reason || "",
+        days: check.days, status: "Pending", reason: reason || "",
       };
       db.leaves.push(leave);
       saveDb(db);
@@ -437,15 +469,72 @@ export function createMockApi(ApiError) {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
-      if (emp.role !== "admin") throw new ApiError("Admins only", 403);
+      if (!canApprove(emp)) throw new ApiError("You can't approve leave", 403);
       if (!["Approved", "Rejected", "Pending"].includes(status)) {
         throw new ApiError("Invalid status", 400);
       }
       const leave = db.leaves.find((l) => l.id === Number(id));
       if (!leave) throw new ApiError("Leave not found", 404);
+      if (leave.employeeId === emp.id) throw new ApiError("You can't approve your own leave", 403);
+      // Managers may only act on their own reports' requests.
+      if (emp.role === "manager" && !reportsOf(db, emp.id).some((r) => r.id === leave.employeeId)) {
+        throw new ApiError("That request isn't from one of your reports", 403);
+      }
       leave.status = status;
       saveDb(db);
       return leave;
+    },
+
+    // ---- Attendance regularizations --------------------------------------
+    // Scoped list: admin → all; manager → self + reports; employee → own.
+    async regularizations() {
+      await delay();
+      const db = loadDb();
+      const emp = requireUser(db);
+      const ids = visibleIds(db, emp);
+      return (db.regularizations || []).filter((r) => ids.has(r.employeeId));
+    },
+
+    // Request a correction for a past day (forgot to punch, wrong time, etc.).
+    async applyRegularization(payload = {}) {
+      await delay();
+      const db = loadDb();
+      const emp = requireUser(db);
+      const { date, in: inTime, out: outTime, reason } = payload;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) throw new ApiError("A valid date is required", 400);
+      if (date > dateKey()) throw new ApiError("You can only regularize a past day", 400);
+      if (!inTime || !outTime) throw new ApiError("Both a clock-in and clock-out time are required", 400);
+      if (new Date(outTime) <= new Date(inTime)) throw new ApiError("Clock-out must be after clock-in", 400);
+      if ((db.regularizations || []).some((r) => r.employeeId === emp.id && r.date === date && r.status === "Pending")) {
+        throw new ApiError("You already have a pending request for that day", 409);
+      }
+      const reg = {
+        id: db._nextRegId++, employeeId: emp.id, date,
+        in: inTime, out: outTime, reason: reason || "", status: "Pending",
+      };
+      db.regularizations = db.regularizations || [];
+      db.regularizations.push(reg);
+      saveDb(db);
+      return reg;
+    },
+
+    // Approve/reject a regularization. Approving rewrites that day's attendance.
+    async setRegularizationStatus(id, status) {
+      await delay();
+      const db = loadDb();
+      const emp = requireUser(db);
+      if (!canApprove(emp)) throw new ApiError("You can't review regularizations", 403);
+      if (!["Approved", "Rejected", "Pending"].includes(status)) throw new ApiError("Invalid status", 400);
+      const reg = (db.regularizations || []).find((r) => r.id === Number(id));
+      if (!reg) throw new ApiError("Request not found", 404);
+      if (reg.employeeId === emp.id) throw new ApiError("You can't approve your own request", 403);
+      if (emp.role === "manager" && !reportsOf(db, emp.id).some((r) => r.id === reg.employeeId)) {
+        throw new ApiError("That request isn't from one of your reports", 403);
+      }
+      reg.status = status;
+      if (status === "Approved") applyRegularization(db.attendance, reg);
+      saveDb(db);
+      return reg;
     },
   };
 }

@@ -13,6 +13,7 @@ import Attendance from "./pages/Attendance";
 import Leave from "./pages/Leave";
 import Payroll from "./pages/Payroll";
 import MyAttendance from "./pages/MyAttendance";
+import Team from "./pages/Team";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 
@@ -44,35 +45,49 @@ function RedirectIfAuthed({ children }) {
 }
 
 // The signed-in app: sidebar + role-specific pages.
+// Three roles: admin (org-wide), manager (own team), employee (just me).
 function AppShell() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isManager } = useAuth();
 
-  const inner = (
-    <AttendanceViewProvider>
-      <Layout>
-      <Routes>
-        {isAdmin ? (
-          <>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/employees" element={<Employees />} />
-            <Route path="/org" element={<Org />} />
-            <Route path="/attendance" element={<Attendance />} />
-            <Route path="/leave" element={<Leave />} />
-            <Route path="/payroll" element={<Payroll />} />
-          </>
-        ) : (
-          <Route path="/" element={<MyAttendance />} />
-        )}
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      </Layout>
-    </AttendanceViewProvider>
+  return (
+    // Every role reads from the backend via DataProvider; the API scopes the
+    // data to what each role may see (admin → all, manager → reports, me → self).
+    <DataProvider>
+      <AttendanceViewProvider>
+        <Layout>
+          <Routes>
+            {isAdmin && (
+              <>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/employees" element={<Employees />} />
+                <Route path="/org" element={<Org />} />
+                <Route path="/attendance" element={<Attendance />} />
+                <Route path="/leave" element={<Leave />} />
+                <Route path="/payroll" element={<Payroll />} />
+              </>
+            )}
+            {isManager && (
+              <>
+                <Route path="/" element={<MyAttendance />} />
+                <Route path="/team" element={<Team />} />
+                <Route path="/attendance" element={<Attendance />} />
+                <Route path="/leave" element={<Leave />} />
+              </>
+            )}
+            {!isAdmin && !isManager && (
+              <>
+                <Route path="/" element={<MyAttendance />} />
+                <Route path="/leave" element={<Leave />} />
+              </>
+            )}
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Layout>
+      </AttendanceViewProvider>
+    </DataProvider>
   );
-
-  // Admin pages read org-wide data from the backend via DataProvider.
-  return isAdmin ? <DataProvider>{inner}</DataProvider> : inner;
 }
 
 export default function App() {

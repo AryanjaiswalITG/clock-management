@@ -60,7 +60,13 @@ export function AuthProvider({ children }) {
   // Replace the cached user after a profile edit.
   const updateUser = useCallback((next) => setUser(next), []);
 
-  const value = { user, loading, login, register, logout, deleteAccount, updateUser, isAdmin: user?.role === "admin" };
+  const value = {
+    user, loading, login, register, logout, deleteAccount, updateUser,
+    isAdmin: user?.role === "admin",
+    isManager: user?.role === "manager",
+    // Managers + admins can approve leave/regularizations and see team views.
+    canApprove: user?.role === "admin" || user?.role === "manager",
+  };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

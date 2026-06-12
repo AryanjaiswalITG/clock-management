@@ -73,7 +73,7 @@ const realApi = {
   deleteEmployee: (id) => request(`/employees/${id}`, { method: "DELETE" }),
 
   myAttendance: () => request("/attendance/me"),
-  clockIn: () => request("/attendance/clock-in", { method: "POST" }),
+  clockIn: (location = "office") => request("/attendance/clock-in", { method: "POST", body: { location } }),
   clockOut: () => request("/attendance/clock-out", { method: "POST" }),
   resetAttendance: () => request("/attendance/reset", { method: "POST" }),
   attendanceToday: () => request("/attendance/today"),
@@ -86,6 +86,11 @@ const realApi = {
   applyLeave: (payload) => request("/leaves", { method: "POST", body: payload }),
   setLeaveStatus: (id, status) =>
     request(`/leaves/${id}`, { method: "PATCH", body: { status } }),
+
+  regularizations: () => request("/regularizations"),
+  applyRegularization: (payload) => request("/regularizations", { method: "POST", body: payload }),
+  setRegularizationStatus: (id, status) =>
+    request(`/regularizations/${id}`, { method: "PATCH", body: { status } }),
 };
 
 // Use the in-browser mock for the server-less (GitHub Pages) build.

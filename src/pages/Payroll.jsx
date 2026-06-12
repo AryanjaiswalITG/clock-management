@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useData } from "../data/DataContext";
 import Badge from "../components/Badge";
 
@@ -14,27 +15,52 @@ function payslip(emp) {
 }
 const money = (n) => "$" + n.toLocaleString("en-US");
 
+// The pay period is the current month, not a frozen label.
+const PERIOD = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
 export default function Payroll() {
   const { employees, deptName } = useData();
+  const [processed, setProcessed] = useState(false);
+
   const slips = employees.map((e) => ({ emp: e, ...payslip(e) }));
   const totalGross = slips.reduce((s, x) => s + x.gross, 0);
   const totalNet = slips.reduce((s, x) => s + x.net, 0);
-  const totalTax = slips.reduce((s, x) => s + x.tax, 0);
+  // Deductions = tax + provident fund (both come out of gross to reach net).
+  const totalDeductions = slips.reduce((s, x) => s + x.tax + x.pf, 0);
+
+  // Download the run as a CSV the user can open in Excel/Sheets.
+  function exportCsv() {
+    const head = ["Employee", "Department", "Base", "HRA", "Gross", "Tax", "PF", "Net Pay", "Status"];
+    const rows = slips.map(({ emp, base, hra, gross, tax, pf, net }) => [
+      emp.name, deptName(emp.deptId), base, hra, gross, tax, pf, net, processed ? "Paid" : "Pending",
+    ]);
+    const csv = [head, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payroll-${PERIOD.replace(" ", "-").toLowerCase()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <>
       <div className="grid cols-4" style={{ marginBottom: 18 }}>
-        <div className="card"><div className="stat-label">Pay Period</div><div className="stat-value" style={{ fontSize: 22 }}>May 2026</div><div className="stat-delta up">Run open</div></div>
+        <div className="card"><div className="stat-label">Pay Period</div><div className="stat-value" style={{ fontSize: 22 }}>{PERIOD}</div><div className={`stat-delta ${processed ? "up" : ""}`}>{processed ? "Processed" : "Run open"}</div></div>
         <div className="card"><div className="stat-label">Total Gross</div><div className="stat-value" style={{ fontSize: 26 }}>{money(totalGross)}</div></div>
-        <div className="card"><div className="stat-label">Total Deductions</div><div className="stat-value" style={{ fontSize: 26 }}>{money(totalTax)}</div></div>
+        <div className="card"><div className="stat-label">Total Deductions</div><div className="stat-value" style={{ fontSize: 26 }}>{money(totalDeductions)}</div></div>
         <div className="card"><div className="stat-label">Net Payable</div><div className="stat-value" style={{ fontSize: 26, color: "var(--teal)" }}>{money(totalNet)}</div></div>
       </div>
 
       <div className="section-head">
-        <h2>Payroll Run — May 2026</h2>
+        <h2>Payroll Run — {PERIOD}</h2>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn ghost">Export CSV</button>
-          <button className="btn primary">Process Payroll</button>
+          <button className="btn ghost" onClick={exportCsv}>Export CSV</button>
+          <button className="btn primary" onClick={() => setProcessed(true)} disabled={processed}>
+            {processed ? "Payroll Processed ✓" : "Process Payroll"}
+          </button>
         </div>
       </div>
 
@@ -52,7 +78,7 @@ export default function Payroll() {
                 <td style={{ color: "var(--rose)" }}>−{money(tax)}</td>
                 <td style={{ color: "var(--rose)" }}>−{money(pf)}</td>
                 <td style={{ fontWeight: 600 }}>{money(net)}</td>
-                <td><Badge status="Pending" /></td>
+                <td><Badge status={processed ? "Paid" : "Pending"} /></td>
               </tr>
             ))}
           </tbody>

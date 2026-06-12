@@ -57,3 +57,11 @@ export function requireAdmin(req, res, next) {
   }
   next();
 }
+
+// Use after requireAuth to allow managers and admins (e.g. approvals, team views).
+export function requireManagerOrAdmin(req, res, next) {
+  if (req.auth?.role !== "admin" && req.auth?.role !== "manager") {
+    return res.status(403).json({ error: "Managers or admins only" });
+  }
+  next();
+}

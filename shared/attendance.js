@@ -85,6 +85,19 @@ export function firstInMinutes(sessions = []) {
   return d.getHours() * 60 + d.getMinutes();
 }
 
+// Apply an approved regularization to an attendance records array (mutates it):
+// replace that employee+date's sessions with the single corrected session.
+// Used by both backends when a manager/admin approves a regularization.
+export function applyRegularization(records, { employeeId, date, in: inIso, out: outIso, location = "office" }) {
+  let rec = records.find((r) => r.employeeId === employeeId && r.date === date);
+  if (!rec) {
+    rec = { employeeId, date, sessions: [] };
+    records.push(rec);
+  }
+  rec.sessions = [{ in: inIso, out: outIso, location, regularized: true }];
+  return rec;
+}
+
 // Is an APPROVED leave covering this date for this employee?
 export function leaveCovers(leaves = [], employeeId, dateStr) {
   return leaves.some(
