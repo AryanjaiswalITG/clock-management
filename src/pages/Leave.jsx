@@ -7,7 +7,7 @@ import Badge from "../components/Badge";
 
 export default function Leave() {
   const { user, isAdmin } = useAuth();
-  const { leaves, setLeaveStatus, applyLeave, empName, empAvatar } = useData();
+  const { leaves, setLeaveStatus, cancelLeave, applyLeave, empName, empAvatar } = useData();
   const [tab, setTab] = useState("All");
 
   // Apply-for-leave modal state.
@@ -15,6 +15,31 @@ export default function Leave() {
   const [form, setForm] = useState({ type: "Casual", from: "", to: "", reason: "" });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
+
+  // Admin decision modal (review details + optional comment).
+  const [decision, setDecision] = useState(null);   // { leave, action }
+  const [comment, setComment] = useState("");
+  const [deciding, setDeciding] = useState(false);
+  const [cancelId, setCancelId] = useState(null);    // id being cancelled
+
+  function openDecision(leave, action) {
+    setComment("");
+    setDecision({ leave, action });
+  }
+  async function confirmDecision() {
+    setDeciding(true);
+    try {
+      await setLeaveStatus(decision.leave.id, decision.action, comment.trim());
+      setDecision(null);
+    } finally {
+      setDeciding(false);
+    }
+  }
+  async function doCancel(id) {
+    setCancelId(id);
+    try { await cancelLeave(id); } catch { /* surfaced via list refresh */ }
+    finally { setCancelId(null); }
+  }
 
   const tabs = ["All", "Pending", "Approved", "Rejected"];
   const shown = tab === "All" ? leaves : leaves.filter((r) => r.status === tab);
@@ -86,24 +111,32 @@ export default function Leave() {
               const mine = l.employeeId === user.id;
               // Leave approval is admins-only; everyone else sees status only.
               const actionable = isAdmin && !mine && l.status === "Pending";
+              const canCancel = mine && l.status === "Pending";
               return (
                 <tr key={l.id}>
                   <td><div className="emp-cell"><div className="emp-avatar">{empAvatar(l.employeeId)}</div><span className="emp-name">{empName(l.employeeId)}{mine ? " (you)" : ""}</span></div></td>
                   <td>{l.type}</td>
                   <td>{l.from} → {l.to}</td>
                   <td>{l.days}</td>
-                  <td style={{ color: "var(--ink-soft)" }}>{l.reason}</td>
+                  <td style={{ color: "var(--ink-soft)" }}>
+                    {l.reason}
+                    {l.decisionComment && (
+                      <div style={{ fontSize: 12, marginTop: 4 }}><b>Admin note:</b> {l.decisionComment}</div>
+                    )}
+                  </td>
                   <td><Badge status={l.status} /></td>
                   <td style={{ textAlign: "right" }}>
                     {actionable ? (
                       <>
-                        <button className="btn primary sm" style={{ marginRight: 6 }} onClick={() => setLeaveStatus(l.id, "Approved")}>Approve</button>
-                        <button className="btn ghost sm" onClick={() => setLeaveStatus(l.id, "Rejected")}>Decline</button>
+                        <button className="btn primary sm" style={{ marginRight: 6 }} onClick={() => openDecision(l, "Approved")}>Approve</button>
+                        <button className="btn ghost sm" onClick={() => openDecision(l, "Rejected")}>Decline</button>
                       </>
+                    ) : canCancel ? (
+                      <button className="btn ghost sm" disabled={cancelId === l.id} onClick={() => doCancel(l.id)}>
+                        {cancelId === l.id ? "Cancelling…" : "Cancel request"}
+                      </button>
                     ) : (
-                      <span style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>
-                        {mine && l.status === "Pending" ? "Awaiting approval" : "—"}
-                      </span>
+                      <span style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>—</span>
                     )}
                   </td>
                 </tr>
@@ -162,6 +195,35 @@ export default function Leave() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Admin decision modal — review details + optional note to the employee */}
+      {decision && (
+        <div className="modal-overlay" onClick={() => !deciding && setDecision(null)}>
+          <div className="modal modal-form" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="modal-close" onClick={() => setDecision(null)} disabled={deciding} aria-label="Close"><X size={18} /></button>
+            <div className="modal-title" style={{ textAlign: "left" }}>
+              {decision.action === "Approved" ? "Approve" : "Decline"} leave request
+            </div>
+            <div className="modal-message" style={{ textAlign: "left", margin: "6px 0 14px" }}>
+              {empName(decision.leave.employeeId)} · {decision.leave.type} · {decision.leave.from} → {decision.leave.to} ({decision.leave.days} day{decision.leave.days === 1 ? "" : "s"})
+              {decision.leave.reason ? ` · "${decision.leave.reason}"` : ""}
+            </div>
+
+            <div className="field">
+              <label className="field-label">{decision.action === "Approved" ? "Note (optional)" : "Reason (optional)"}</label>
+              <input className="field-control" value={comment} onChange={(e) => setComment(e.target.value)} maxLength={140}
+                placeholder={decision.action === "Approved" ? "Visible to the employee" : "Why it was declined"} autoFocus />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 8, justifyContent: "flex-end" }}>
+              <button type="button" className="btn ghost" onClick={() => setDecision(null)} disabled={deciding}>Cancel</button>
+              <button type="button" className={`btn ${decision.action === "Approved" ? "primary" : "danger"}`} onClick={confirmDecision} disabled={deciding}>
+                {deciding ? "Saving…" : decision.action === "Approved" ? "Approve" : "Decline"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

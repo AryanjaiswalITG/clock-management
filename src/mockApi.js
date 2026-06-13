@@ -10,6 +10,7 @@ import {
 } from "../shared/attendance.js";
 import { validateLeaveRequest } from "../shared/leave.js";
 import { buildDemoData, SEED_VERSION } from "../shared/demoSeed.js";
+import { notifMsg, NOTIF_TYPES, NOTIF_KEEP } from "../shared/notifications.js";
 
 const DB_KEY = "nw_mock_db";
 const TOKEN_KEY = "nw_token";
@@ -36,9 +37,11 @@ function seedDatabase() {
     attendance: data.attendance,
     regularizations: data.regularizations,
     deletedEmployees: [], // archive of admin-removed employees
+    notifications: [],
     settings: { companyName: "Northwind", weekendDays: DEFAULT_WEEKEND_DAYS, holidays: data.holidays },
     _nextLeaveId: data._nextLeaveId,
     _nextRegId: data._nextRegId,
+    _nextNotifId: 1,
     _seedVersion: SEED_VERSION,
   };
 }
@@ -63,6 +66,8 @@ function loadDb() {
   if (!Array.isArray(db.deletedEmployees)) { db.deletedEmployees = []; migrated = true; }
   if (!Array.isArray(db.regularizations)) { db.regularizations = []; migrated = true; }
   if (typeof db._nextRegId !== "number") { db._nextRegId = 1; migrated = true; }
+  if (!Array.isArray(db.notifications)) { db.notifications = []; migrated = true; }
+  if (typeof db._nextNotifId !== "number") { db._nextNotifId = 1; migrated = true; }
   for (const e of db.employees) {
     if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
     // Backfill account-creation timestamp for accounts that predate the field,
@@ -91,6 +96,28 @@ function isClockedIn(rec) {
 }
 
 const publicEmployee = ({ password, ...rest }) => rest;
+
+// ---- Notifications (db-aware) -----------------------------------------------
+// Broadcast events fan out to one row per recipient at write time, so reads stay
+// a simple filter by recipient id. Newest NOTIF_KEEP per user are retained.
+function addNotification(db, userId, message, type) {
+  db.notifications = db.notifications || [];
+  db.notifications.push({
+    id: db._nextNotifId++, userId, message, type, read: false,
+    createdAt: new Date().toISOString(),
+  });
+  const mine = db.notifications.filter((n) => n.userId === userId);
+  if (mine.length > NOTIF_KEEP) {
+    const drop = new Set(mine.slice(0, mine.length - NOTIF_KEEP).map((n) => n.id));
+    db.notifications = db.notifications.filter((n) => !drop.has(n.id));
+  }
+}
+const notifyAdmins = (db, message, type, exceptId = null) =>
+  db.employees.filter((e) => e.role === "admin" && e.id !== exceptId)
+    .forEach((a) => addNotification(db, a.id, message, type));
+const notifyEveryone = (db, message, type, exceptId = null) =>
+  db.employees.filter((e) => e.id !== exceptId)
+    .forEach((e) => addNotification(db, e.id, message, type));
 
 // Build the api object. ApiError is injected to avoid a circular import.
 export function createMockApi(ApiError) {
@@ -156,6 +183,7 @@ export function createMockApi(ApiError) {
         createdAt: new Date().toISOString(), password: String(password),
       };
       db.employees.push(emp);
+      notifyAdmins(db, notifMsg.employeeJoined(emp.name), NOTIF_TYPES.EMPLOYEE);
       saveDb(db);
       return { token: `mock:${emp.id}`, user: publicEmployee(emp) };
     },
@@ -178,10 +206,13 @@ export function createMockApi(ApiError) {
       // everyone, so only admins may change them — a normal user's edit must
       // never leak into the admin's (or anyone else's) account.
       if (me.role !== "admin") throw new ApiError("Only admins can change company settings", 403);
+      let renamedTo = null;
+      let policyChanged = false;
       if (payload.companyName !== undefined) {
         const trimmed = String(payload.companyName).trim();
         if (!trimmed) throw new ApiError("Company name cannot be empty", 400);
         if (trimmed.length > 40) throw new ApiError("Company name is too long", 400);
+        if (trimmed !== db.settings.companyName) renamedTo = trimmed;
         db.settings.companyName = trimmed;
       }
       if (payload.weekendDays !== undefined) {
@@ -190,6 +221,7 @@ export function createMockApi(ApiError) {
           throw new ApiError("weekendDays must be an array of 0–6 (Sun–Sat)", 400);
         }
         db.settings.weekendDays = [...new Set(wd)].sort((a, b) => a - b);
+        policyChanged = true;
       }
       if (payload.holidays !== undefined) {
         const hs = payload.holidays;
@@ -197,7 +229,10 @@ export function createMockApi(ApiError) {
           throw new ApiError("holidays must be an array of YYYY-MM-DD dates", 400);
         }
         db.settings.holidays = [...new Set(hs)].sort();
+        policyChanged = true;
       }
+      if (renamedTo) notifyEveryone(db, notifMsg.companyRenamed(renamedTo), NOTIF_TYPES.COMPANY, me.id);
+      if (policyChanged) notifyEveryone(db, notifMsg.policyUpdated(), NOTIF_TYPES.COMPANY, me.id);
       saveDb(db);
       return db.settings;
     },
@@ -316,8 +351,77 @@ export function createMockApi(ApiError) {
         password: String(password),
       };
       db.employees.push(emp);
+      notifyAdmins(db, notifMsg.employeeJoined(emp.name), NOTIF_TYPES.EMPLOYEE);
       saveDb(db);
       return publicEmployee(emp);
+    },
+
+    // Admin updates another employee's org placement / status: designation,
+    // department, reporting manager, role and status. Notifies the employee.
+    async updateEmployee(id, payload = {}) {
+      await delay();
+      const db = loadDb();
+      const admin = requireUser(db);
+      if (admin.role !== "admin") throw new ApiError("Admins only", 403);
+      const emp = db.employees.find((e) => e.id === Number(id));
+      if (!emp) throw new ApiError("Employee not found", 404);
+      const { designation, deptId, managerId, role, status } = payload;
+      const events = [];
+      if (designation !== undefined) {
+        const t = String(designation).trim();
+        if (!t) throw new ApiError("Designation cannot be empty", 400);
+        emp.designation = t;
+      }
+      if (deptId !== undefined) {
+        const did = Number(deptId);
+        if (!db.departments.some((d) => d.id === did)) throw new ApiError("Unknown department", 400);
+        if (did !== emp.deptId) events.push(notifMsg.departmentChanged(db.departments.find((d) => d.id === did)?.name));
+        emp.deptId = did;
+      }
+      if (managerId !== undefined) {
+        if (managerId === null || managerId === "") {
+          if (emp.managerId !== null) events.push(notifMsg.managerChanged(null));
+          emp.managerId = null;
+        } else {
+          const mid = Number(managerId);
+          if (mid === emp.id) throw new ApiError("An employee can't report to themselves", 400);
+          const mgr = db.employees.find((e) => e.id === mid);
+          if (!mgr) throw new ApiError("Unknown manager", 400);
+          if (mid !== emp.managerId) events.push(notifMsg.managerChanged(mgr.name));
+          emp.managerId = mid;
+        }
+      }
+      if (role !== undefined) {
+        if (!["admin", "manager", "employee"].includes(role)) throw new ApiError("Invalid role", 400);
+        if (role !== emp.role) events.push(notifMsg.roleChanged(role));
+        emp.role = role;
+      }
+      if (status !== undefined) {
+        if (!["Active", "Inactive"].includes(status)) throw new ApiError("Invalid status", 400);
+        if (status !== emp.status) events.push(notifMsg.statusChanged(status));
+        emp.status = status;
+      }
+      events.forEach((m) => addNotification(db, emp.id, m, NOTIF_TYPES.TEAM));
+      saveDb(db);
+      return publicEmployee(emp);
+    },
+
+    // Admin creates a department.
+    async createDepartment(name) {
+      await delay();
+      const db = loadDb();
+      const admin = requireUser(db);
+      if (admin.role !== "admin") throw new ApiError("Admins only", 403);
+      const trimmed = String(name || "").trim();
+      if (!trimmed) throw new ApiError("Department name is required", 400);
+      if (db.departments.some((d) => d.name.toLowerCase() === trimmed.toLowerCase())) {
+        throw new ApiError("A department with that name already exists", 409);
+      }
+      const did = db.departments.reduce((max, d) => Math.max(max, d.id), 0) + 1;
+      const dept = { id: did, name: trimmed };
+      db.departments.push(dept);
+      saveDb(db);
+      return dept;
     },
 
     // Archive of admin-removed employees (with added/deleted dates).
@@ -469,11 +573,27 @@ export function createMockApi(ApiError) {
         days: check.days, status: "Pending", reason: reason || "",
       };
       db.leaves.push(leave);
+      notifyAdmins(db, notifMsg.leaveSubmitted(emp.name), NOTIF_TYPES.LEAVE);
       saveDb(db);
       return leave;
     },
 
-    async setLeaveStatus(id, status) {
+    // Employee cancels their OWN pending leave request (status -> Cancelled).
+    async cancelLeave(id) {
+      await delay();
+      const db = loadDb();
+      const emp = requireUser(db);
+      const leave = db.leaves.find((l) => l.id === Number(id));
+      if (!leave) throw new ApiError("Leave not found", 404);
+      if (leave.employeeId !== emp.id) throw new ApiError("You can only cancel your own request", 403);
+      if (leave.status !== "Pending") throw new ApiError("Only a pending request can be cancelled", 409);
+      leave.status = "Cancelled";
+      notifyAdmins(db, notifMsg.leaveCancelled(emp.name), NOTIF_TYPES.LEAVE);
+      saveDb(db);
+      return leave;
+    },
+
+    async setLeaveStatus(id, status, comment) {
       await delay();
       const db = loadDb();
       const emp = requireUser(db);
@@ -486,8 +606,42 @@ export function createMockApi(ApiError) {
       if (!leave) throw new ApiError("Leave not found", 404);
       if (leave.employeeId === emp.id) throw new ApiError("You can't approve your own leave", 403);
       leave.status = status;
+      const note = comment ? String(comment).trim() : "";
+      if (note) leave.decisionComment = note;
+      if (status === "Approved") addNotification(db, leave.employeeId, notifMsg.leaveApproved(note), NOTIF_TYPES.LEAVE);
+      else if (status === "Rejected") addNotification(db, leave.employeeId, notifMsg.leaveRejected(note), NOTIF_TYPES.LEAVE);
       saveDb(db);
       return leave;
+    },
+
+    // ---- Notifications ------------------------------------------------------
+    async notifications() {
+      await delay(40);
+      const db = loadDb();
+      const me = requireUser(db);
+      return (db.notifications || [])
+        .filter((n) => n.userId === me.id)
+        .sort((a, b) => b.id - a.id);
+    },
+
+    async markNotificationRead(id, read = true) {
+      await delay(40);
+      const db = loadDb();
+      const me = requireUser(db);
+      const n = (db.notifications || []).find((x) => x.id === Number(id));
+      if (!n || n.userId !== me.id) throw new ApiError("Notification not found", 404);
+      n.read = read !== false;
+      saveDb(db);
+      return n;
+    },
+
+    async markAllNotificationsRead() {
+      await delay(40);
+      const db = loadDb();
+      const me = requireUser(db);
+      (db.notifications || []).forEach((n) => { if (n.userId === me.id) n.read = true; });
+      saveDb(db);
+      return { ok: true };
     },
 
     // ---- Attendance regularizations --------------------------------------

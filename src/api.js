@@ -70,7 +70,9 @@ const realApi = {
   employees: () => request("/employees"),
   deletedEmployees: () => request("/employees/deleted"),
   createEmployee: (payload) => request("/employees", { method: "POST", body: payload }),
+  updateEmployee: (id, payload) => request(`/employees/${id}`, { method: "PATCH", body: payload }),
   deleteEmployee: (id) => request(`/employees/${id}`, { method: "DELETE" }),
+  createDepartment: (name) => request("/departments", { method: "POST", body: { name } }),
 
   myAttendance: () => request("/attendance/me"),
   clockIn: (location = "office") => request("/attendance/clock-in", { method: "POST", body: { location } }),
@@ -84,8 +86,14 @@ const realApi = {
 
   leaves: () => request("/leaves"),
   applyLeave: (payload) => request("/leaves", { method: "POST", body: payload }),
-  setLeaveStatus: (id, status) =>
-    request(`/leaves/${id}`, { method: "PATCH", body: { status } }),
+  setLeaveStatus: (id, status, comment) =>
+    request(`/leaves/${id}`, { method: "PATCH", body: { status, comment } }),
+  cancelLeave: (id) => request(`/leaves/${id}/cancel`, { method: "POST" }),
+
+  notifications: () => request("/notifications"),
+  markNotificationRead: (id, read = true) =>
+    request(`/notifications/${id}`, { method: "PATCH", body: { read } }),
+  markAllNotificationsRead: () => request("/notifications/read-all", { method: "POST" }),
 
   regularizations: () => request("/regularizations"),
   applyRegularization: (payload) => request("/regularizations", { method: "POST", body: payload }),

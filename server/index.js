@@ -12,6 +12,7 @@ import { signToken, requireAuth, requireAdmin, requireManagerOrAdmin, setAuthCoo
 import { todayRecord, isClockedIn, summarize } from "./attendance.js";
 import { monthlyForEmployee, monthlyForTeam, applyRegularization } from "../shared/attendance.js";
 import { validateLeaveRequest } from "../shared/leave.js";
+import { notifMsg, NOTIF_TYPES, NOTIF_KEEP } from "../shared/notifications.js";
 
 const db = load();
 const app = express();
@@ -54,6 +55,36 @@ function initials(name) {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ---- Notifications ----------------------------------------------------------
+// Persisted, per-recipient notifications. Broadcast events (e.g. a company-name
+// change) fan out to one row per recipient at write time, so reads stay a simple
+// filter by recipient id. The newest NOTIF_KEEP per user are retained.
+function addNotification(userId, message, type) {
+  db.notifications = db.notifications || [];
+  db.notifications.push({
+    id: db._nextNotifId++,
+    userId,
+    message,
+    type,
+    read: false,
+    createdAt: new Date().toISOString(),
+  });
+  // Prune this user's history to the most recent NOTIF_KEEP.
+  const mine = db.notifications.filter((n) => n.userId === userId);
+  if (mine.length > NOTIF_KEEP) {
+    const drop = new Set(mine.slice(0, mine.length - NOTIF_KEEP).map((n) => n.id));
+    db.notifications = db.notifications.filter((n) => !drop.has(n.id));
+  }
+}
+const notifyAdmins = (message, type, exceptId = null) =>
+  db.employees
+    .filter((e) => e.role === "admin" && e.id !== exceptId)
+    .forEach((a) => addNotification(a.id, message, type));
+const notifyEveryone = (message, type, exceptId = null) =>
+  db.employees
+    .filter((e) => e.id !== exceptId)
+    .forEach((e) => addNotification(e.id, message, type));
 
 // ---- Auth -------------------------------------------------------------------
 
@@ -110,6 +141,7 @@ app.post("/api/auth/register", (req, res) => {
     passwordHash: bcrypt.hashSync(String(password), 10),
   };
   db.employees.push(emp);
+  notifyAdmins(notifMsg.employeeJoined(emp.name), NOTIF_TYPES.EMPLOYEE);
   save();
 
   const token = signToken(emp);
@@ -142,10 +174,13 @@ app.get("/api/settings", (req, res) => {
 // able to change settings that would also change for the admin.
 app.patch("/api/settings", requireAuth, requireAdmin, (req, res) => {
   const { companyName, weekendDays, holidays } = req.body || {};
+  let renamedTo = null;
+  let policyChanged = false;
   if (companyName !== undefined) {
     const trimmed = String(companyName).trim();
     if (!trimmed) return res.status(400).json({ error: "Company name cannot be empty" });
     if (trimmed.length > 40) return res.status(400).json({ error: "Company name is too long" });
+    if (trimmed !== db.settings.companyName) renamedTo = trimmed;
     db.settings.companyName = trimmed;
   }
   if (weekendDays !== undefined) {
@@ -153,15 +188,46 @@ app.patch("/api/settings", requireAuth, requireAdmin, (req, res) => {
       return res.status(400).json({ error: "weekendDays must be an array of 0–6 (Sun–Sat)" });
     }
     db.settings.weekendDays = [...new Set(weekendDays)].sort((a, b) => a - b);
+    policyChanged = true;
   }
   if (holidays !== undefined) {
     if (!Array.isArray(holidays) || holidays.some((h) => !/^\d{4}-\d{2}-\d{2}$/.test(h))) {
       return res.status(400).json({ error: "holidays must be an array of YYYY-MM-DD dates" });
     }
     db.settings.holidays = [...new Set(holidays)].sort();
+    policyChanged = true;
   }
+  // Company-wide changes notify everyone (except the admin who made them).
+  if (renamedTo) notifyEveryone(notifMsg.companyRenamed(renamedTo), NOTIF_TYPES.COMPANY, req.auth.sub);
+  if (policyChanged) notifyEveryone(notifMsg.policyUpdated(), NOTIF_TYPES.COMPANY, req.auth.sub);
   save();
   res.json(db.settings);
+});
+
+// ---- Notifications ----------------------------------------------------------
+
+// GET /api/notifications -> the signed-in user's notifications, newest first.
+app.get("/api/notifications", requireAuth, (req, res) => {
+  const mine = (db.notifications || [])
+    .filter((n) => n.userId === req.auth.sub)
+    .sort((a, b) => b.id - a.id);
+  res.json(mine);
+});
+
+// PATCH /api/notifications/:id { read } -> mark one of MY notifications read.
+app.patch("/api/notifications/:id", requireAuth, (req, res) => {
+  const n = (db.notifications || []).find((x) => x.id === Number(req.params.id));
+  if (!n || n.userId !== req.auth.sub) return res.status(404).json({ error: "Notification not found" });
+  n.read = req.body?.read !== false;
+  save();
+  res.json(n);
+});
+
+// POST /api/notifications/read-all -> mark all MY notifications read.
+app.post("/api/notifications/read-all", requireAuth, (req, res) => {
+  (db.notifications || []).forEach((n) => { if (n.userId === req.auth.sub) n.read = true; });
+  save();
+  res.json({ ok: true });
 });
 
 // GET /api/me -> the logged-in user's profile
@@ -304,8 +370,72 @@ app.post("/api/employees", requireAuth, requireAdmin, (req, res) => {
     passwordHash: bcrypt.hashSync(String(password), 10),
   };
   db.employees.push(emp);
+  notifyAdmins(notifMsg.employeeJoined(emp.name), NOTIF_TYPES.EMPLOYEE);
   save();
   res.status(201).json(publicEmployee(emp));
+});
+
+// Admin updates another employee's org placement / status. Editable here:
+// designation, department, reporting manager, role and status. On any change
+// the affected employee is notified so their My Team / dashboard reflects it.
+app.patch("/api/employees/:id", requireAuth, requireAdmin, (req, res) => {
+  const emp = db.employees.find((e) => e.id === Number(req.params.id));
+  if (!emp) return res.status(404).json({ error: "Employee not found" });
+  const { designation, deptId, managerId, role, status } = req.body || {};
+  const events = [];
+
+  if (designation !== undefined) {
+    const t = String(designation).trim();
+    if (!t) return res.status(400).json({ error: "Designation cannot be empty" });
+    emp.designation = t;
+  }
+  if (deptId !== undefined) {
+    const id = Number(deptId);
+    if (!db.departments.some((d) => d.id === id)) return res.status(400).json({ error: "Unknown department" });
+    if (id !== emp.deptId) events.push(notifMsg.departmentChanged(db.departments.find((d) => d.id === id)?.name));
+    emp.deptId = id;
+  }
+  if (managerId !== undefined) {
+    if (managerId === null || managerId === "") {
+      if (emp.managerId !== null) events.push(notifMsg.managerChanged(null));
+      emp.managerId = null;
+    } else {
+      const mid = Number(managerId);
+      if (mid === emp.id) return res.status(400).json({ error: "An employee can't report to themselves" });
+      const mgr = db.employees.find((e) => e.id === mid);
+      if (!mgr) return res.status(400).json({ error: "Unknown manager" });
+      if (mid !== emp.managerId) events.push(notifMsg.managerChanged(mgr.name));
+      emp.managerId = mid;
+    }
+  }
+  if (role !== undefined) {
+    if (!["admin", "manager", "employee"].includes(role)) return res.status(400).json({ error: "Invalid role" });
+    if (role !== emp.role) events.push(notifMsg.roleChanged(role));
+    emp.role = role;
+  }
+  if (status !== undefined) {
+    if (!["Active", "Inactive"].includes(status)) return res.status(400).json({ error: "Invalid status" });
+    if (status !== emp.status) events.push(notifMsg.statusChanged(status));
+    emp.status = status;
+  }
+
+  events.forEach((m) => addNotification(emp.id, m, NOTIF_TYPES.TEAM));
+  save();
+  res.json(publicEmployee(emp));
+});
+
+// Admin creates a department.
+app.post("/api/departments", requireAuth, requireAdmin, (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "Department name is required" });
+  if (db.departments.some((d) => d.name.toLowerCase() === name.toLowerCase())) {
+    return res.status(409).json({ error: "A department with that name already exists" });
+  }
+  const id = db.departments.reduce((max, d) => Math.max(max, d.id), 0) + 1;
+  const dept = { id, name };
+  db.departments.push(dept);
+  save();
+  res.status(201).json(dept);
 });
 
 // Admin deletes an employee: archive a snapshot, remove them, and cascade
@@ -451,14 +581,27 @@ app.post("/api/leaves", requireAuth, (req, res) => {
     type, from, to, days: check.days, status: "Pending", reason: reason || "",
   };
   db.leaves.push(leave);
+  notifyAdmins(notifMsg.leaveSubmitted(findEmployee(req.auth.sub)?.name || "An employee"), NOTIF_TYPES.LEAVE);
   save();
   res.status(201).json(leave);
+});
+
+// Employee cancels their OWN pending leave request (sets status -> Cancelled).
+app.post("/api/leaves/:id/cancel", requireAuth, (req, res) => {
+  const leave = db.leaves.find((l) => l.id === Number(req.params.id));
+  if (!leave) return res.status(404).json({ error: "Leave not found" });
+  if (leave.employeeId !== req.auth.sub) return res.status(403).json({ error: "You can only cancel your own request" });
+  if (leave.status !== "Pending") return res.status(409).json({ error: "Only a pending request can be cancelled" });
+  leave.status = "Cancelled";
+  notifyAdmins(notifMsg.leaveCancelled(findEmployee(req.auth.sub)?.name || "An employee"), NOTIF_TYPES.LEAVE);
+  save();
+  res.json(leave);
 });
 
 // Approve / reject — ADMINS ONLY. Leave decisions are a company-level action,
 // so managers and employees can view requests but cannot act on them.
 app.patch("/api/leaves/:id", requireAuth, requireAdmin, (req, res) => {
-  const { status } = req.body || {};
+  const { status, comment } = req.body || {};
   if (!["Approved", "Rejected", "Pending"].includes(status)) {
     return res.status(400).json({ error: "Invalid status" });
   }
@@ -466,6 +609,11 @@ app.patch("/api/leaves/:id", requireAuth, requireAdmin, (req, res) => {
   if (!leave) return res.status(404).json({ error: "Leave not found" });
   if (leave.employeeId === req.auth.sub) return res.status(403).json({ error: "You can't approve your own leave" });
   leave.status = status;
+  const note = comment ? String(comment).trim() : "";
+  if (note) leave.decisionComment = note;
+  // Notify the requester of the decision (with the admin's optional comment).
+  if (status === "Approved") addNotification(leave.employeeId, notifMsg.leaveApproved(note), NOTIF_TYPES.LEAVE);
+  else if (status === "Rejected") addNotification(leave.employeeId, notifMsg.leaveRejected(note), NOTIF_TYPES.LEAVE);
   save();
   res.json(leave);
 });

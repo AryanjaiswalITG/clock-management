@@ -16,9 +16,10 @@ export function DataProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // Load all org data. `silent` skips the loading/error UI so the background
+  // poller can refresh without flashing spinners or clobbering the screen.
+  const loadAll = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) { setLoading(true); setError(null); }
     try {
       const [depts, emps, lvs, att, regs] = await Promise.all([
         api.departments(),
@@ -35,17 +36,41 @@ export function DataProvider({ children }) {
       // Admin-only archive; non-admins get 403 — fall back to empty.
       setDeletedEmployees(await api.deletedEmployees().catch(() => []));
     } catch (e) {
-      setError(e.message || "Failed to load data");
+      if (!silent) setError(e.message || "Failed to load data");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
+  const refresh = useCallback(() => loadAll({ silent: false }), [loadAll]);
+
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Near-real-time sync: poll in the background every 15s and whenever the tab
+  // regains focus, so admin changes (new employees, leave decisions, team moves)
+  // appear without a manual refresh or re-login. Paused while the tab is hidden.
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) loadAll({ silent: true }); };
+    const iv = setInterval(tick, 15000);
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener("focus", tick);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [loadAll]);
 
   // Admin: create one employee, then reload org data.
   const createEmployee = useCallback(async (payload) => {
     const emp = await api.createEmployee(payload);
+    await refresh();
+    return emp;
+  }, [refresh]);
+
+  // Admin: update an employee's org placement / status, then reload.
+  const updateEmployee = useCallback(async (id, patch) => {
+    const emp = await api.updateEmployee(id, patch);
     await refresh();
     return emp;
   }, [refresh]);
@@ -56,6 +81,13 @@ export function DataProvider({ children }) {
     await refresh();
   }, [refresh]);
 
+  // Admin: create a department, then reload.
+  const createDepartment = useCallback(async (name) => {
+    const dept = await api.createDepartment(name);
+    await refresh();
+    return dept;
+  }, [refresh]);
+
   // Apply for a leave request, then reload so it shows up in the list.
   const applyLeave = useCallback(async (payload) => {
     const leave = await api.applyLeave(payload);
@@ -63,14 +95,21 @@ export function DataProvider({ children }) {
     return leave;
   }, [refresh]);
 
-  // Optimistic leave status change, persisted to the backend.
-  const setLeaveStatus = useCallback(async (id, status) => {
+  // Optimistic leave status change (admin approve/reject), persisted to the
+  // backend. `comment` is the admin's optional note shown to the employee.
+  const setLeaveStatus = useCallback(async (id, status, comment) => {
     setLeaves((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
     try {
-      await api.setLeaveStatus(id, status);
+      await api.setLeaveStatus(id, status, comment);
     } catch {
       refresh(); // roll back to server truth on failure
     }
+  }, [refresh]);
+
+  // Employee cancels their own pending leave request, then reload.
+  const cancelLeave = useCallback(async (id) => {
+    await api.cancelLeave(id);
+    await refresh();
   }, [refresh]);
 
   // Request an attendance regularization, then reload.
@@ -98,10 +137,11 @@ export function DataProvider({ children }) {
     }));
     return {
       departments, employees, leaves, attendanceToday, regularizations, deletedEmployees, loading, error,
-      refresh, setLeaveStatus, applyLeave, applyRegularization, setRegularizationStatus, createEmployee, deleteEmployees,
+      refresh, setLeaveStatus, cancelLeave, applyLeave, applyRegularization, setRegularizationStatus,
+      createEmployee, updateEmployee, deleteEmployees, createDepartment,
       deptName, empById, empName, empAvatar, headcountByDept,
     };
-  }, [departments, employees, leaves, attendanceToday, regularizations, deletedEmployees, loading, error, refresh, setLeaveStatus, applyLeave, applyRegularization, setRegularizationStatus, createEmployee, deleteEmployees]);
+  }, [departments, employees, leaves, attendanceToday, regularizations, deletedEmployees, loading, error, refresh, setLeaveStatus, cancelLeave, applyLeave, applyRegularization, setRegularizationStatus, createEmployee, updateEmployee, deleteEmployees, createDepartment]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

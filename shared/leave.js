@@ -67,9 +67,11 @@ export function validateLeaveRequest(leaves, employeeId, { type, from, to } = {}
   const days = leaveDays(from, to);
   if (days < 1) return { ok: false, error: "That date range isn't valid." };
 
-  // No overlap with an existing pending/approved request.
+  // No overlap with an existing pending/approved request. Rejected and
+  // Cancelled requests are inactive, so they never block a new one.
   const clash = leaves.some(
-    (l) => l.employeeId === employeeId && l.status !== "Rejected" &&
+    (l) => l.employeeId === employeeId &&
+      l.status !== "Rejected" && l.status !== "Cancelled" &&
       rangesOverlap(from, to, l.from, l.to)
   );
   if (clash) return { ok: false, error: "You already have a leave request covering those dates." };

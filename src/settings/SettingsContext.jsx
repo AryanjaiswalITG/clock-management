@@ -27,8 +27,18 @@ export function SettingsProvider({ children }) {
     const fetchSettings = () =>
       api.settings().then((s) => { if (!cancelled) apply(s); }).catch(() => {});
     fetchSettings();
-    window.addEventListener("focus", fetchSettings);
-    return () => { cancelled = true; window.removeEventListener("focus", fetchSettings); };
+    // Poll in the background (and on focus) so an admin's company/policy change
+    // reaches every signed-in user within a few seconds, no reload needed.
+    const tick = () => { if (!document.hidden) fetchSettings(); };
+    const iv = setInterval(tick, 30000);
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+      window.removeEventListener("focus", tick);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [apply]);
 
   // Persist a new company name and update the brand everywhere.

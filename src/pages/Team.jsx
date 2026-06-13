@@ -20,7 +20,7 @@ function Stat({ icon: Icon, label, value, sub, tone }) {
 
 export default function Team() {
   const { user } = useAuth();
-  const { employees, attendanceToday, leaves, regularizations, setLeaveStatus, deptName, loading } = useData();
+  const { employees, attendanceToday, leaves, regularizations, deptName, loading } = useData();
 
   if (loading) return <div style={{ color: "var(--ink-soft)" }}>Loading your team…</div>;
 
@@ -41,7 +41,7 @@ export default function Team() {
       <div className="grid cols-4" style={{ marginBottom: 18 }}>
         <Stat icon={Users} label="My Reports" value={reports.length} sub="Direct reports" tone="up" />
         <Stat icon={UserCheck} label="Present Today" value={presentToday} sub={`${reports.length ? Math.round(presentToday / reports.length * 100) : 0}% of team`} tone="up" />
-        <Stat icon={Plane} label="Leave Approvals" value={pendingLeaves.length} sub="Awaiting you" tone={pendingLeaves.length ? "down" : ""} />
+        <Stat icon={Plane} label="Pending Leaves" value={pendingLeaves.length} sub="Awaiting admin" tone={pendingLeaves.length ? "down" : ""} />
         <Stat icon={ClipboardCheck} label="Regularizations" value={pendingRegs.length} sub="Awaiting you" tone={pendingRegs.length ? "down" : ""} />
       </div>
 
@@ -74,14 +74,14 @@ export default function Team() {
         </table>
       </div>
 
-      {/* Pending leave approvals for my reports */}
+      {/* Pending leave for my reports — read-only (approval is admin-only) */}
       <div className="card" style={{ padding: 0, marginBottom: 18 }}>
         <div style={{ padding: "18px 20px 6px" }}>
-          <div className="card-title">Leave Approvals</div>
-          <div className="card-sub">Requests from your reports waiting on a decision</div>
+          <div className="card-title">Team Leave Requests</div>
+          <div className="card-sub">Pending requests from your reports — decisions are made by an admin</div>
         </div>
         <table>
-          <thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th></th></tr></thead>
+          <thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th></tr></thead>
           <tbody>
             {pendingLeaves.length === 0 && (
               <tr><td colSpan={6} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No pending leave requests 🎉</td></tr>
@@ -95,10 +95,7 @@ export default function Team() {
                   <td>{l.from} → {l.to}</td>
                   <td>{l.days}</td>
                   <td style={{ color: "var(--ink-soft)" }}>{l.reason}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <button className="btn primary sm" style={{ marginRight: 6 }} onClick={() => setLeaveStatus(l.id, "Approved")}>Approve</button>
-                    <button className="btn ghost sm" onClick={() => setLeaveStatus(l.id, "Rejected")}>Decline</button>
-                  </td>
+                  <td><Badge status={l.status} /></td>
                 </tr>
               );
             })}

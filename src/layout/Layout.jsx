@@ -9,6 +9,7 @@ import { SUMMARY_ITEMS, styleFor } from "../components/attendanceStatus";
 import { formatDuration } from "../utils/time";
 import Avatar from "../components/Avatar";
 import GlobalSearch from "../components/GlobalSearch";
+import NotificationBell from "../components/NotificationBell";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -193,6 +194,7 @@ export default function Layout({ children }) {
           </div>
           <div className="topbar-right">
             <GlobalSearch />
+            <NotificationBell />
             <button className="theme-toggle" onClick={toggleMode} title={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle theme">
               {mode === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>

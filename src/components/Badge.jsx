@@ -1,6 +1,7 @@
 const MAP = {
   Present: "green", Working: "teal", Absent: "rose", "On Leave": "amber",
   Active: "green", Approved: "green", Pending: "amber", Rejected: "rose", Paid: "green",
+  Cancelled: "gray", Inactive: "gray",
   // Monthly attendance statuses
   "Half Day": "amber", Leave: "violet", Weekend: "gray", Holiday: "teal",
   Upcoming: "gray", "Not employed": "gray",
