@@ -1,6 +1,14 @@
-// Tiny JSON-file "database". On first run it seeds from the original mock data,
-// hashes passwords, and writes data.json. After that, data.json is the source of truth
-// so clock-in/out punches and leave decisions persist across restarts.
+// App data store. Two persistence backends, chosen at runtime:
+//
+//  - Postgres (when DATABASE_URL is set, e.g. a free Neon database): the ENTIRE
+//    app state is stored as a single JSON document in an app_state table, so it
+//    survives redeploys and Render's ephemeral disk. This keeps the exact same
+//    in-memory object model the rest of the server already uses — no schema or
+//    route changes — while making created accounts/leaves/etc. durable.
+//  - JSON file (no DATABASE_URL): writes server/data.json. Great for local dev.
+//
+// On first run with an empty database it seeds the demo org, hashes passwords,
+// and persists. After that, the stored state is the source of truth.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,6 +24,21 @@ export const DEFAULT_PASSWORD = "password123";
 
 // Single-sourced from shared/, re-exported so `import { dateKey } from "./db.js"` still works.
 export { dateKey };
+
+// ---- Optional Postgres backend ---------------------------------------------
+const USE_PG = !!process.env.DATABASE_URL;
+let pool = null;
+async function pg() {
+  if (!pool) {
+    const { Pool } = await import("pg"); // lazy: only needed when DATABASE_URL is set
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      // Managed Postgres (Neon/Supabase/Render) require SSL.
+      ssl: process.env.PGSSL === "disable" ? false : { rejectUnauthorized: false },
+    });
+  }
+  return pool;
+}
 
 // Build a fresh demo DB: shared profiles/attendance/leaves + bcrypt password hashes.
 function seedDatabase() {
@@ -36,29 +59,48 @@ function seedDatabase() {
   };
 }
 
+// Defensively backfill fields added in later versions onto an existing store, so
+// older persisted data keeps working. Returns true if anything changed.
+function migrate(d) {
+  let migrated = false;
+  if (!d.settings) { d.settings = { companyName: "Northwind" }; migrated = true; }
+  if (!Array.isArray(d.settings.weekendDays)) { d.settings.weekendDays = DEFAULT_WEEKEND_DAYS; migrated = true; }
+  if (!Array.isArray(d.settings.holidays)) { d.settings.holidays = []; migrated = true; }
+  if (!Array.isArray(d.deletedEmployees)) { d.deletedEmployees = []; migrated = true; }
+  if (!Array.isArray(d.regularizations)) { d.regularizations = []; migrated = true; }
+  if (typeof d._nextRegId !== "number") { d._nextRegId = 1; migrated = true; }
+  if (!Array.isArray(d.notifications)) { d.notifications = []; migrated = true; }
+  if (typeof d._nextNotifId !== "number") { d._nextNotifId = 1; migrated = true; }
+  for (const e of d.employees) {
+    if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
+    // Backfill account-creation timestamp for older records, derived from
+    // joinDate, so the "Newly" badge works without losing existing data.
+    if (!e.createdAt && e.joinDate) { e.createdAt = `${e.joinDate}T00:00:00.000Z`; migrated = true; }
+  }
+  return migrated;
+}
+
 let db;
 
-export function load() {
+export async function load() {
   if (db) return db;
+  if (USE_PG) {
+    const p = await pg();
+    await p.query(`CREATE TABLE IF NOT EXISTS app_state (id INT PRIMARY KEY, data JSONB NOT NULL)`);
+    const r = await p.query(`SELECT data FROM app_state WHERE id = 1`);
+    if (r.rows[0]) {
+      db = r.rows[0].data;
+      if (migrate(db)) await persistNow();
+    } else {
+      db = seedDatabase();
+      await persistNow();
+    }
+    return db;
+  }
+  // File fallback (local dev / no DATABASE_URL).
   if (fs.existsSync(DATA_FILE)) {
     db = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-    // Migrate older data files that predate newer fields.
-    let migrated = false;
-    if (!db.settings) { db.settings = { companyName: "Northwind" }; migrated = true; }
-    if (!Array.isArray(db.settings.weekendDays)) { db.settings.weekendDays = DEFAULT_WEEKEND_DAYS; migrated = true; }
-    if (!Array.isArray(db.settings.holidays)) { db.settings.holidays = []; migrated = true; }
-    if (!Array.isArray(db.deletedEmployees)) { db.deletedEmployees = []; migrated = true; }
-    if (!Array.isArray(db.regularizations)) { db.regularizations = []; migrated = true; }
-    if (typeof db._nextRegId !== "number") { db._nextRegId = 1; migrated = true; }
-    if (!Array.isArray(db.notifications)) { db.notifications = []; migrated = true; }
-    if (typeof db._nextNotifId !== "number") { db._nextNotifId = 1; migrated = true; }
-    for (const e of db.employees) {
-      if (!("halfDayCutoff" in e)) { e.halfDayCutoff = null; migrated = true; }
-      // Backfill account-creation timestamp for older records, derived from
-      // joinDate, so the "Newly" badge works without losing existing data.
-      if (!e.createdAt && e.joinDate) { e.createdAt = `${e.joinDate}T00:00:00.000Z`; migrated = true; }
-    }
-    if (migrated) save();
+    if (migrate(db)) save();
   } else {
     db = seedDatabase();
     save();
@@ -66,6 +108,32 @@ export function load() {
   return db;
 }
 
+// Write the whole state to Postgres (awaited form).
+async function persistNow() {
+  const p = await pg();
+  await p.query(
+    `INSERT INTO app_state (id, data) VALUES (1, $1::jsonb)
+     ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
+    [JSON.stringify(db)]
+  );
+}
+
+// Synchronous-looking save used throughout the routes. With Postgres it persists
+// asynchronously (fire-and-forget; errors logged) — writes complete in a few ms
+// and a SIGTERM flush (below) covers redeploys. With the file backend it writes
+// data.json synchronously as before.
 export function save() {
+  if (USE_PG) {
+    persistNow().catch((e) => console.error("DB persist failed:", e.message));
+    return;
+  }
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+}
+
+// Best-effort final flush before the process exits (Render sends SIGTERM on
+// redeploy), so the last write isn't lost.
+export async function flush() {
+  if (USE_PG && db) {
+    try { await persistNow(); } catch (e) { console.error("DB flush failed:", e.message); }
+  }
 }

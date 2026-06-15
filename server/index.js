@@ -7,14 +7,14 @@ import bcrypt from "bcryptjs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { load, save, DEFAULT_PASSWORD, dateKey } from "./db.js";
+import { load, save, flush, DEFAULT_PASSWORD, dateKey } from "./db.js";
 import { signToken, requireAuth, requireAdmin, requireManagerOrAdmin, setAuthCookie, clearAuthCookie } from "./auth.js";
 import { todayRecord, isClockedIn, summarize } from "./attendance.js";
 import { monthlyForEmployee, monthlyForTeam, applyRegularization } from "../shared/attendance.js";
 import { validateLeaveRequest } from "../shared/leave.js";
 import { notifMsg, NOTIF_TYPES, NOTIF_KEEP } from "../shared/notifications.js";
 
-const db = load();
+const db = await load();
 const app = express();
 // CORS: allow the frontend origin(s) to send credentials cross-origin.
 // Set CORS_ORIGIN on Render to your GitHub Pages origin (scheme + host, NO path),
@@ -680,5 +680,12 @@ app.get("*", (req, res, next) => {
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Northwind HR API running on http://localhost:${PORT}`);
+  console.log(`Storage: ${process.env.DATABASE_URL ? "Postgres (persistent)" : "data.json (local file)"}`);
   console.log(`Demo login: ${db.employees[0]?.email} / password "${DEFAULT_PASSWORD}"`);
 });
+
+// Flush the latest state to the database before shutting down (Render sends
+// SIGTERM on redeploy), so nothing from the final moments is lost.
+for (const sig of ["SIGTERM", "SIGINT"]) {
+  process.on(sig, async () => { await flush(); process.exit(0); });
+}
