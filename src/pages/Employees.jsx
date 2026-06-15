@@ -188,6 +188,22 @@ export default function Employees() {
             </tr>
           </thead>
           <tbody>
+            {loading && Array.from({ length: 5 }).map((_, i) => (
+              <tr key={`sk-${i}`}>
+                <td><span className="skeleton" style={{ display: "block", width: 16, height: 16, borderRadius: 4 }} /></td>
+                <td>
+                  <div className="emp-cell">
+                    <span className="skeleton" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
+                    <span className="skeleton" style={{ width: 130, height: 12 }} />
+                  </div>
+                </td>
+                <td><span className="skeleton" style={{ display: "inline-block", width: 90, height: 12 }} /></td>
+                <td><span className="skeleton" style={{ display: "inline-block", width: 150, height: 12 }} /></td>
+                <td><span className="skeleton" style={{ display: "inline-block", width: 60, height: 12 }} /></td>
+                <td><span className="skeleton" style={{ display: "inline-block", width: 64, height: 22, borderRadius: 999 }} /></td>
+                <td />
+              </tr>
+            ))}
             {filtered.map((e) => {
               const isSelf = e.id === user?.id;
               const checked = selected.includes(e.id);

@@ -252,7 +252,7 @@ export default function MyAttendance() {
           <div style={{ fontSize: 13, color: "var(--panel-ink-soft)", letterSpacing: ".1em", textTransform: "uppercase" }}>
             {nowDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 52, fontWeight: 600, margin: "6px 0 6px" }}>{fmtBig}</div>
+          <div className="live-clock" style={{ fontFamily: "var(--font-display)", fontWeight: 600, margin: "6px 0 6px" }}>{fmtBig}</div>
           <div style={{ marginBottom: 18 }}>
             <span className={`badge ${live.clockedIn ? "green" : "gray"}`}>
               {live.clockedIn ? "● Clocked in" : "Clocked out"}

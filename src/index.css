@@ -1,4 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Outfit:wght@300..700&display=swap");
+/* Fonts are loaded via <link> in index.html (with preconnect) — faster than a
+   render-blocking CSS @import. */
 
 :root {
   --bg: #f4f6f5;
@@ -28,6 +29,7 @@
   /* Reusable tokens (deduped from repeated declarations) */
   --shadow-pop: 0 14px 38px rgba(22, 32, 29, 0.2); /* floating dropdowns/popovers */
   --blur-glass: blur(16px) saturate(150%); /* glassmorphism backdrop filter */
+  --blur-card: blur(6px) saturate(125%); /* subtle frost on content cards */
   --ring-line: 1px solid var(--line); /* default 1px hairline border */
   --font-body: "Outfit", sans-serif;
   --font-display: "Fraunces", serif;
@@ -402,6 +404,15 @@ a {
   padding: 20px;
   box-shadow: var(--shadow);
 }
+/* Only when a wallpaper is set (body.has-bg): make cards subtly translucent +
+   frosted so the image shows through while text stays crisp. Scoped this way so
+   users without a wallpaper pay no backdrop-filter cost. Themed via --surface,
+   so it reads correctly in both light and dark mode. */
+body.has-bg .card {
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  -webkit-backdrop-filter: var(--blur-card);
+  backdrop-filter: var(--blur-card);
+}
 .card-title {
   font-family: var(--font-display);
   font-size: 17px;
@@ -423,7 +434,7 @@ a {
 }
 .stat-value {
   font-family: var(--font-display);
-  font-size: 34px;
+  font-size: clamp(24px, 5.5vw, 34px); /* scales down on small screens */
   font-weight: 600;
   margin-top: 8px;
 }
@@ -2192,4 +2203,90 @@ table input[type="checkbox"]:disabled {
 .loc-toggle button.active {
   background: var(--surface);
   color: var(--teal);
+}
+
+/* ---- Live clock: fluid size so it shrinks on phones ---- */
+.live-clock {
+  font-size: clamp(34px, 11vw, 52px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+/* ---- Mobile type scale: trim the largest text on small screens ---- */
+@media (max-width: 600px) {
+  .content {
+    padding: 18px 14px;
+  }
+  .topbar h1 {
+    font-size: 19px;
+  }
+  .card-title {
+    font-size: 16px;
+  }
+  .status-chip .n {
+    font-size: 21px;
+  }
+}
+
+/* ---- Loading: splash spinner + skeleton shimmer ---- */
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-top-color: var(--teal);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--surface) 65%, transparent),
+    transparent
+  );
+  animation: shimmer 1.3s infinite;
+}
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ---- UX polish: keyboard focus ring + button press feedback ---- */
+:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Respect reduced-motion: pause decorative loaders. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .skeleton::after {
+    animation: none;
+  }
 }

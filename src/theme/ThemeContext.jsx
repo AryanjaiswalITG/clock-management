@@ -75,12 +75,14 @@ export function ThemeProvider({ children }) {
       b.style.backgroundSize = "cover";
       b.style.backgroundPosition = "center";
       b.style.backgroundAttachment = "fixed";
+      b.classList.add("has-bg"); // enables the frosted-card treatment
       try { localStorage.setItem(BGIMAGE_KEY, bgImage); } catch { /* quota — keep for session only */ }
     } else {
       b.style.backgroundImage = "";
       b.style.backgroundSize = "";
       b.style.backgroundPosition = "";
       b.style.backgroundAttachment = "";
+      b.classList.remove("has-bg");
       localStorage.removeItem(BGIMAGE_KEY);
     }
   }, [bgImage]);
