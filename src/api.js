@@ -7,7 +7,13 @@ import { createMockApi } from "./mockApi";
 
 const TOKEN_KEY = "nw_token";
 
-const API_PREFIX = `${import.meta.env.BASE_URL}api`.replace(/\/+/g, "/");
+// When VITE_API_BASE is set (production builds → shared Render API), call that
+// absolute origin. Otherwise use a same-origin relative "/api" path (local dev
+// proxy to :4000, and the single-origin Render-hosted build).
+const API_BASE = import.meta.env.VITE_API_BASE;
+const API_PREFIX = API_BASE
+  ? `${API_BASE.replace(/\/+$/, "")}/api`
+  : `${import.meta.env.BASE_URL}api`.replace(/\/+/g, "/");
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
