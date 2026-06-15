@@ -10,7 +10,10 @@ services:
     runtime: node
     plan: free
     # Build the frontend, then install backend deps.
-    buildCommand: npm install && npm run build && npm install --prefix server
+    # --include=dev forces devDependencies (vite, the build tool) to install even
+    # though NODE_ENV=production is set below — otherwise `vite build` fails with
+    # "vite: not found" (exit 127). vite is only needed at build time, not runtime.
+    buildCommand: npm install --include=dev && npm run build && npm install --prefix server
     # Start the Express server (it serves ../dist and /api).
     startCommand: node server/index.js
     healthCheckPath: /api/settings
