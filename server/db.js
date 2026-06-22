@@ -77,6 +77,15 @@ function migrate(d) {
     // joinDate, so the "Newly" badge works without losing existing data.
     if (!e.createdAt && e.joinDate) { e.createdAt = `${e.joinDate}T00:00:00.000Z`; migrated = true; }
   }
+  // Safety net: an org must always have at least one active admin. If every
+  // admin was demoted or removed, the whole org gets locked out of employee
+  // management (admin-only routes 403 for everyone). Restore the first account
+  // to an active admin so there is always a way back in.
+  if (d.employees.length && !d.employees.some((e) => e.role === "admin")) {
+    d.employees[0].role = "admin";
+    d.employees[0].status = "Active";
+    migrated = true;
+  }
   return migrated;
 }
 
