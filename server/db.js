@@ -77,13 +77,28 @@ function migrate(d) {
     // joinDate, so the "Newly" badge works without losing existing data.
     if (!e.createdAt && e.joinDate) { e.createdAt = `${e.joinDate}T00:00:00.000Z`; migrated = true; }
   }
-  // Safety net: an org must always have at least one active admin. If every
-  // admin was demoted or removed, the whole org gets locked out of employee
-  // management (admin-only routes 403 for everyone). Restore the first account
-  // to an active admin so there is always a way back in.
-  if (d.employees.length && !d.employees.some((e) => e.role === "admin")) {
-    d.employees[0].role = "admin";
-    d.employees[0].status = "Active";
+  // Safety net: guarantee a known active-admin login always exists, so the org
+  // can never be locked out of employee management (a demoted/removed last admin
+  // otherwise makes every admin route 403 for everyone, with no way back in).
+  // The credentials are intentionally well-known — this is a public demo app
+  // (see DEFAULT_PASSWORD, which is likewise committed and publicly exposed).
+  const FALLBACK_ADMIN_EMAIL = "newadmin@demo.com";
+  const fa = d.employees.find((e) => e.email?.toLowerCase() === FALLBACK_ADMIN_EMAIL);
+  if (!fa) {
+    const id = d.employees.reduce((max, e) => Math.max(max, e.id), 0) + 1;
+    d.employees.push({
+      id, name: "new admin", designation: "Administrator",
+      deptId: d.departments[0]?.id ?? 1, managerId: null,
+      email: FALLBACK_ADMIN_EMAIL, joinDate: dateKey(), status: "Active",
+      avatar: "NA", avatarUrl: null, role: "admin",
+      targetHours: 8, halfDayCutoff: null, createdAt: new Date().toISOString(),
+      passwordHash: bcrypt.hashSync("123456", 10),
+    });
+    migrated = true;
+  } else if (fa.role !== "admin" || fa.status !== "Active") {
+    // Keep it usable even if it was later demoted/deactivated.
+    fa.role = "admin";
+    fa.status = "Active";
     migrated = true;
   }
   return migrated;
