@@ -3,6 +3,14 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api, setToken, clearToken } from "../api";
 
+// ⚠️ TEMPORARY LOGIN BYPASS — set BYPASS_LOGIN back to false to restore the
+// normal login page. While true, the app auto-signs-in as the demo account
+// below (so visitors land straight in the app, no login). This removes access
+// control: anyone with the link can use the app. Remove this block + the catch
+// branch that uses it when you're done.
+const BYPASS_LOGIN = true;
+const BYPASS_ACCOUNT = { email: "admin@demo.do", password: "password123" };
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -19,7 +27,19 @@ export function AuthProvider({ children }) {
         const me = await api.me();
         if (!cancelled) setUser(me);
       } catch {
-        clearToken();
+        // No valid session. Normally we'd clear and show the login page; while
+        // BYPASS_LOGIN is on we auto-sign-in as the demo account instead.
+        if (BYPASS_LOGIN) {
+          try {
+            const { token, user: u } = await api.login(BYPASS_ACCOUNT.email, BYPASS_ACCOUNT.password);
+            if (token) setToken(token);
+            if (!cancelled) setUser(u);
+          } catch {
+            clearToken();
+          }
+        } else {
+          clearToken();
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
