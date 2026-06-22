@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
-import { Palette, Sun, Moon, Image as ImageIcon, Building, Check, RotateCcw, Trash2, Droplet, CalendarDays, Plus, CalendarOff } from "lucide-react";
-import { useTheme, DEFAULT_ACCENT } from "../theme/ThemeContext";
+import { Palette, Sun, Moon, Image as ImageIcon, Building, Check, RotateCcw, Trash2, Droplet, CalendarDays, Plus, CalendarOff, Eye } from "lucide-react";
+import { useTheme } from "../theme/ThemeContext";
 import { useSettings } from "../settings/SettingsContext";
 import { useAuth } from "../auth/AuthContext";
 
@@ -107,8 +107,8 @@ export default function Settings() {
 
       <div className="grid cols-2" style={{ alignItems: "start" }}>
         {/* Theme + colours */}
-        <div className="card">
-          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><Palette size={17} /> Theme & colours</div>
+        <div className="card settings-card">
+          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="card-ico"><Palette size={16} /></span> Theme & colours</div>
           <div className="card-sub">Switch mode and pick your accent — applied instantly.</div>
 
           <div className="field">
@@ -119,26 +119,32 @@ export default function Settings() {
             </div>
           </div>
 
-          <div className="field">
+          <div className="field" style={{ marginBottom: 0 }}>
             <label className="field-label">Accent colour</label>
-            <div className="swatches">
+            <div className="swatches named">
               {accents.map((a) => (
-                <button key={a.color} className={`swatch ${accent === a.color ? "active" : ""}`}
-                  style={{ background: a.color }} title={a.name} aria-label={a.name} onClick={() => setAccent(a.color)}>
-                  {accent === a.color && <Check size={16} color="#fff" />}
-                </button>
+                <div key={a.color} className="swatch-named">
+                  <button className={`swatch ${accent === a.color ? "active" : ""}`}
+                    style={{ background: a.color }} title={a.name} aria-label={a.name} onClick={() => setAccent(a.color)}>
+                    {accent === a.color && <Check size={16} color="#fff" />}
+                  </button>
+                  <span className={`swatch-name ${accent === a.color ? "active" : ""}`}>{a.name}</span>
+                </div>
               ))}
-              <label className="swatch swatch-custom" title="Custom colour" style={{ background: accent }}>
-                <Droplet size={15} color="#fff" />
-                <input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} hidden />
-              </label>
+              <div className="swatch-named">
+                <label className="swatch swatch-custom" title="Custom colour" style={{ background: accent }}>
+                  <Droplet size={15} color="#fff" />
+                  <input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} hidden />
+                </label>
+                <span className="swatch-name">Custom</span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Background */}
-        <div className="card">
-          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><ImageIcon size={17} /> Background</div>
+        <div className="card settings-card">
+          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="card-ico"><ImageIcon size={16} /></span> Background</div>
           <div className="card-sub">Set a custom background colour or upload a wallpaper.</div>
 
           <div className="field">
@@ -172,10 +178,44 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Live appearance preview — reads the same CSS variables the real UI
+          uses (--teal, --surface, --bg, --sidebar-bg), so it updates instantly
+          as the mode / accent / background change. */}
+      <div className="card settings-card" style={{ marginTop: 18 }}>
+        <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="card-ico"><Eye size={16} /></span> Live preview</div>
+        <div className="card-sub">How the app looks with your current appearance — changes apply here in real time.</div>
+        <div className="theme-preview">
+          <div className="tp-side">
+            <div className="tp-brand" />
+            <div className="tp-nav active" />
+            <div className="tp-nav" />
+            <div className="tp-nav" />
+            <div className="tp-nav" />
+          </div>
+          <div
+            className="tp-main"
+            style={bgImage ? { backgroundImage: `url("${bgImage}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
+          >
+            <div
+              className="tp-card"
+              style={bgImage ? { background: "color-mix(in srgb, var(--surface) 75%, transparent)", backdropFilter: "var(--blur-card)", WebkitBackdropFilter: "var(--blur-card)" } : undefined}
+            >
+              <div className="tp-line title" />
+              <div className="tp-line" />
+              <div className="tp-line short" />
+              <div className="tp-row">
+                <div className="tp-btn" />
+                <div className="tp-badge" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Company — org-wide brand, so only admins can change it. */}
       {isAdmin && (
-        <div className="card" style={{ marginTop: 18 }}>
-          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><Building size={17} /> Company information</div>
+        <div className="card settings-card" style={{ marginTop: 18 }}>
+          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="card-ico"><Building size={16} /></span> Company information</div>
           <div className="card-sub">Shown as the brand in the sidebar, header and login screen — for everyone.</div>
           <div className="field" style={{ maxWidth: 380, marginBottom: 0 }}>
             <label className="field-label">Company name</label>
@@ -186,8 +226,8 @@ export default function Settings() {
 
       {/* Attendance policy — admins set the weekend days + holidays for the org. */}
       {isAdmin && (
-        <div className="card" style={{ marginTop: 18 }}>
-          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><CalendarDays size={17} /> Attendance policy</div>
+        <div className="card settings-card" style={{ marginTop: 18 }}>
+          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="card-ico"><CalendarDays size={16} /></span> Attendance policy</div>
           <div className="card-sub">Weekends and holidays drive the monthly attendance statuses.</div>
 
           <div className="field">

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UserPlus, Trash2, X, Check, AlertTriangle, Archive, Pencil, Building2 } from "lucide-react";
+import { UserPlus, Trash2, X, Check, AlertTriangle, Archive, Pencil, Building2, Users, UserCheck, Sparkles, Search, SearchX, List, LayoutGrid } from "lucide-react";
 import { useData } from "../data/DataContext";
 import { useAuth } from "../auth/AuthContext";
 import Badge from "../components/Badge";
@@ -15,6 +15,7 @@ export default function Employees() {
   const { user } = useAuth();
   const [dept, setDept] = useState(0);
   const [q, setQ] = useState("");
+  const [view, setView] = useState("table");   // "table" | "grid"
 
   const [selected, setSelected] = useState([]);        // ids checked for deletion
   const [showAdd, setShowAdd] = useState(false);
@@ -41,6 +42,12 @@ export default function Employees() {
     (dept === 0 || e.deptId === dept) &&
     (e.name.toLowerCase().includes(q.toLowerCase()) || e.designation.toLowerCase().includes(q.toLowerCase()))
   );
+
+  // Org-wide summary (whole company, independent of the current filter).
+  const activeCount = employees.filter((e) => e.status !== "Inactive").length;
+  const newCount = employees.filter((e) => isNewcomer(e)).length;
+  const deptCount = (id) => employees.filter((e) => e.deptId === id).length;
+  const hasFilters = q.trim() !== "" || dept !== 0;
 
   // Everyone selectable in the current view (you can't delete yourself).
   const selectableIds = filtered.filter((e) => e.id !== user?.id).map((e) => e.id);
@@ -164,86 +171,182 @@ export default function Employees() {
         </div>
       )}
 
-      <div className="filters">
-        <span className={`chip ${dept === 0 ? "active" : ""}`} onClick={() => setDept(0)}>All</span>
-        {departments.map((d) => (
-          <span key={d.id} className={`chip ${dept === d.id ? "active" : ""}`} onClick={() => setDept(d.id)}>{d.name}</span>
-        ))}
-        <input
-          placeholder="Search by name or role…"
-          value={q} onChange={(e) => setQ(e.target.value)}
-          style={{ marginLeft: "auto", padding: "7px 14px", borderRadius: 999, border: "1px solid var(--line)", fontFamily: "inherit", fontSize: 13, outline: "none", minWidth: 220 }}
-        />
+      {/* Org summary — premium stat cards matching the dashboard style. */}
+      <div className="grid cols-4" style={{ marginBottom: 18 }}>
+        <div className="card stat-card">
+          <div className="row-between">
+            <div className="stat-label"><Users size={15} /> Total People</div>
+            <div className="stat-icon"><Users size={17} color="var(--teal)" /></div>
+          </div>
+          <div className="stat-value">{loading ? "…" : employees.length}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="row-between">
+            <div className="stat-label"><UserCheck size={15} /> Active</div>
+            <div className="stat-icon"><UserCheck size={17} color="var(--teal)" /></div>
+          </div>
+          <div className="stat-value">{loading ? "…" : activeCount}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="row-between">
+            <div className="stat-label"><Sparkles size={15} /> Newcomers</div>
+            <div className="stat-icon"><Sparkles size={17} color="var(--teal)" /></div>
+          </div>
+          <div className="stat-value">{loading ? "…" : newCount}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="row-between">
+            <div className="stat-label"><Building2 size={15} /> Departments</div>
+            <div className="stat-icon"><Building2 size={17} color="var(--teal)" /></div>
+          </div>
+          <div className="stat-value">{loading ? "…" : departments.length}</div>
+        </div>
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 44 }}>
-                <input type="checkbox" aria-label="Select all" checked={allSelected}
-                  onChange={toggleAll} disabled={selectableIds.length === 0} />
-              </th>
-              <th>Employee</th><th>Department</th><th>Email</th><th>Joined</th><th>Status</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && Array.from({ length: 5 }).map((_, i) => (
-              <tr key={`sk-${i}`}>
-                <td><span className="skeleton" style={{ display: "block", width: 16, height: 16, borderRadius: 4 }} /></td>
-                <td>
-                  <div className="emp-cell">
-                    <span className="skeleton" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
-                    <span className="skeleton" style={{ width: 130, height: 12 }} />
-                  </div>
-                </td>
-                <td><span className="skeleton" style={{ display: "inline-block", width: 90, height: 12 }} /></td>
-                <td><span className="skeleton" style={{ display: "inline-block", width: 150, height: 12 }} /></td>
-                <td><span className="skeleton" style={{ display: "inline-block", width: 60, height: 12 }} /></td>
-                <td><span className="skeleton" style={{ display: "inline-block", width: 64, height: 22, borderRadius: 999 }} /></td>
-                <td />
+      <div className="filters">
+        <span className={`chip ${dept === 0 ? "active" : ""}`} onClick={() => setDept(0)}>
+          All <span className="chip-count">{employees.length}</span>
+        </span>
+        {departments.map((d) => (
+          <span key={d.id} className={`chip ${dept === d.id ? "active" : ""}`} onClick={() => setDept(d.id)}>
+            {d.name} <span className="chip-count">{deptCount(d.id)}</span>
+          </span>
+        ))}
+        <div className="filters-right">
+          <div className="view-switch">
+            <button className={`view-tab ${view === "table" ? "active" : ""}`} onClick={() => setView("table")} title="Table view">
+              <List size={15} /> <span className="vt-full">Table</span>
+            </button>
+            <button className={`view-tab ${view === "grid" ? "active" : ""}`} onClick={() => setView("grid")} title="Grid view">
+              <LayoutGrid size={15} /> <span className="vt-full">Grid</span>
+            </button>
+          </div>
+          <div className="emp-search">
+            <Search size={15} />
+            <input
+              placeholder="Search by name or role…"
+              value={q} onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {!loading && filtered.length === 0 ? (
+        /* ---- Rich empty state ---- */
+        <div className="card">
+          <div className="empty-state">
+            <div className="empty-state-icon"><SearchX size={28} /></div>
+            <div className="empty-state-title">No employees found</div>
+            <div className="empty-state-sub">
+              {hasFilters
+                ? "No one matches your current filters. Try a different search, or clear the filters to see everyone."
+                : "There are no employees yet. Add your first teammate to get started."}
+            </div>
+            <div className="empty-state-actions">
+              {hasFilters && (
+                <button className="btn ghost" onClick={() => { setQ(""); setDept(0); }}>Clear filters</button>
+              )}
+              <button className="btn primary" onClick={() => { setAddError(null); setForm(EMPTY_FORM); setShowAdd(true); }}>
+                <UserPlus size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} /> Add Employee
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : view === "grid" && !loading ? (
+        /* ---- Grid (card) view ---- */
+        <div className="emp-grid">
+          {filtered.map((e) => {
+            const isSelf = e.id === user?.id;
+            const checked = selected.includes(e.id);
+            return (
+              <div key={e.id} className={`emp-card ${checked ? "row-selected" : ""}`}>
+                <input className="emp-card-check" type="checkbox" checked={checked} disabled={isSelf}
+                  onChange={() => toggle(e.id)}
+                  aria-label={isSelf ? "You can't delete your own account" : `Select ${e.name}`}
+                  title={isSelf ? "You can't delete your own account" : undefined} />
+                <button className="btn ghost sm emp-card-edit" onClick={() => startEdit(e)} title={`Edit ${e.name}`} aria-label={`Edit ${e.name}`}>
+                  <Pencil size={14} />
+                </button>
+                <Avatar src={e.avatarUrl} initials={e.avatar} className="emp-card-avatar" />
+                <div className="emp-card-name">{e.name}</div>
+                <div className="emp-card-role">{e.designation}</div>
+                <div className="emp-card-dept">{deptName(e.deptId)}</div>
+                <div className="emp-card-badges">
+                  <Badge status={e.status} />
+                  {isNewcomer(e) && <Badge status="Newly" />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* ---- Table view (and loading skeleton) ---- */
+        <div className="card" style={{ padding: 0 }}>
+          <table>
+            <thead>
+              <tr>
+                <th style={{ width: 44 }}>
+                  <input type="checkbox" aria-label="Select all" checked={allSelected}
+                    onChange={toggleAll} disabled={selectableIds.length === 0} />
+                </th>
+                <th>Employee</th><th>Department</th><th>Email</th><th>Joined</th><th>Status</th><th></th>
               </tr>
-            ))}
-            {filtered.map((e) => {
-              const isSelf = e.id === user?.id;
-              const checked = selected.includes(e.id);
-              return (
-                <tr key={e.id} className={checked ? "row-selected" : ""}>
-                  <td>
-                    <input type="checkbox" checked={checked} disabled={isSelf}
-                      onChange={() => toggle(e.id)}
-                      aria-label={isSelf ? "You can't delete your own account" : `Select ${e.name}`}
-                      title={isSelf ? "You can't delete your own account" : undefined} />
-                  </td>
+            </thead>
+            <tbody>
+              {loading && Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`sk-${i}`}>
+                  <td><span className="skeleton" style={{ display: "block", width: 16, height: 16, borderRadius: 4 }} /></td>
                   <td>
                     <div className="emp-cell">
-                      <Avatar src={e.avatarUrl} initials={e.avatar} className="emp-avatar" />
-                      <div><div className="emp-name">{e.name}</div><div className="emp-meta">{e.designation}</div></div>
+                      <span className="skeleton" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
+                      <span className="skeleton" style={{ width: 130, height: 12 }} />
                     </div>
                   </td>
-                  <td>{deptName(e.deptId)}</td>
-                  <td style={{ color: "var(--ink-soft)" }}>{e.email}</td>
-                  <td>{new Date(e.joinDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <Badge status={e.status} />
-                      {isNewcomer(e) && <Badge status="Newly" />}
-                    </div>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <button className="btn ghost sm" onClick={() => startEdit(e)} title={`Edit ${e.name}`}>
-                      <Pencil size={14} style={{ marginRight: 6, verticalAlign: "-2px" }} /> Edit
-                    </button>
-                  </td>
+                  <td><span className="skeleton" style={{ display: "inline-block", width: 90, height: 12 }} /></td>
+                  <td><span className="skeleton" style={{ display: "inline-block", width: 150, height: 12 }} /></td>
+                  <td><span className="skeleton" style={{ display: "inline-block", width: 60, height: 12 }} /></td>
+                  <td><span className="skeleton" style={{ display: "inline-block", width: 64, height: 22, borderRadius: 999 }} /></td>
+                  <td />
                 </tr>
-              );
-            })}
-            {filtered.length === 0 && !loading && (
-              <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--ink-soft)", padding: 24 }}>No employees match.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+              {!loading && filtered.map((e) => {
+                const isSelf = e.id === user?.id;
+                const checked = selected.includes(e.id);
+                return (
+                  <tr key={e.id} className={checked ? "row-selected" : ""}>
+                    <td>
+                      <input type="checkbox" checked={checked} disabled={isSelf}
+                        onChange={() => toggle(e.id)}
+                        aria-label={isSelf ? "You can't delete your own account" : `Select ${e.name}`}
+                        title={isSelf ? "You can't delete your own account" : undefined} />
+                    </td>
+                    <td>
+                      <div className="emp-cell">
+                        <Avatar src={e.avatarUrl} initials={e.avatar} className="emp-avatar" />
+                        <div><div className="emp-name">{e.name}</div><div className="emp-meta">{e.designation}</div></div>
+                      </div>
+                    </td>
+                    <td>{deptName(e.deptId)}</td>
+                    <td style={{ color: "var(--ink-soft)" }}>{e.email}</td>
+                    <td>{new Date(e.joinDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <Badge status={e.status} />
+                        {isNewcomer(e) && <Badge status="Newly" />}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <button className="btn ghost sm" onClick={() => startEdit(e)} title={`Edit ${e.name}`}>
+                        <Pencil size={14} style={{ marginRight: 6, verticalAlign: "-2px" }} /> Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* ---- Old Employees (archive of admin-removed employees) ---- */}
       {deletedEmployees.length > 0 && (

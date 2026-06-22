@@ -2291,3 +2291,310 @@ table input[type="checkbox"]:disabled {
     animation: none;
   }
 }
+
+/* ======================================================================
+   EMPLOYEES PAGE ENHANCEMENTS
+   Summary stat strip · grid view · polished filter bar · empty state.
+   All scoped to this page's markup so no other section is affected.
+   ====================================================================== */
+
+/* Search field on the Employees filter bar. Mirrors the topbar .search but
+   stays visible on mobile (the topbar one is hidden below 768px). */
+.emp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: var(--ring-line);
+  border-radius: 999px;
+  padding: 7px 14px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  min-width: 220px;
+  transition: border-color 0.15s;
+}
+.emp-search:focus-within {
+  border-color: color-mix(in srgb, var(--teal) 55%, var(--line));
+}
+.emp-search input {
+  border: none;
+  background: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 13px;
+  width: 100%;
+  color: var(--ink);
+}
+
+/* Count badge on the department filter chips. */
+.chip .chip-count {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+.chip.active .chip-count {
+  opacity: 0.9;
+}
+
+/* Right-hand cluster of the filter bar (view switch + search). */
+.filters-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---- Employee card-grid view ---- */
+.emp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
+  gap: 16px;
+}
+.emp-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 16px 18px;
+  background: var(--surface);
+  border: var(--ring-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.25s ease,
+    border-color 0.15s ease;
+}
+.emp-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 30px rgba(22, 32, 29, 0.12);
+  border-color: color-mix(in srgb, var(--teal) 30%, var(--line));
+}
+.emp-card.row-selected {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px var(--teal-soft);
+}
+body.has-bg .emp-card {
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  -webkit-backdrop-filter: var(--blur-card);
+  backdrop-filter: var(--blur-card);
+  border-color: color-mix(in srgb, var(--surface) 50%, transparent);
+}
+.emp-card-check {
+  position: absolute;
+  top: 13px;
+  left: 13px;
+}
+.emp-card-edit {
+  position: absolute !important;
+  top: 10px;
+  right: 10px;
+  padding: 6px !important;
+}
+.emp-card-avatar {
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 50%;
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-weight: 600;
+  font-size: 22px !important;
+  margin-bottom: 10px;
+}
+.emp-card-name {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.emp-card-role {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.emp-card-dept {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 4px 0 10px;
+}
+.emp-card-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ---- Rich empty state (shared by table + grid views) ---- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+}
+.empty-state-icon {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: var(--teal-soft);
+  color: var(--teal);
+  margin-bottom: 14px;
+}
+.empty-state-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+.empty-state-sub {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  max-width: 340px;
+  line-height: 1.5;
+  margin-top: 6px;
+}
+.empty-state-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ======================================================================
+   SETTINGS PAGE ENHANCEMENTS
+   Header icon chips · scoped card hover · named accent swatches ·
+   live appearance preview.
+   ====================================================================== */
+
+/* Small tinted icon chip used in card headers to unify the section look. */
+.card-ico {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  flex-shrink: 0;
+}
+
+/* Subtle hover lift — scoped to settings cards so other pages are untouched. */
+.settings-card {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.25s ease,
+    border-color 0.15s ease;
+}
+.settings-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(22, 32, 29, 0.1);
+  border-color: color-mix(in srgb, var(--teal) 22%, var(--line));
+}
+
+/* ---- Named accent swatches ---- */
+.swatches.named {
+  gap: 16px 18px;
+}
+.swatch-named {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+.swatch-name {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+.swatch-name.active {
+  color: var(--ink);
+}
+
+/* ---- Live appearance preview ---- */
+.theme-preview {
+  display: flex;
+  height: 156px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: var(--ring-line);
+  box-shadow: var(--shadow);
+}
+.tp-side {
+  width: 66px;
+  background: var(--sidebar-bg);
+  padding: 13px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.tp-brand {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--teal);
+  margin-bottom: 5px;
+}
+.tp-nav {
+  height: 9px;
+  border-radius: 4px;
+  background: var(--sidebar-ink-soft);
+  opacity: 0.4;
+}
+.tp-nav.active {
+  background: var(--teal);
+  opacity: 1;
+}
+.tp-main {
+  flex: 1;
+  background: var(--bg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.tp-card {
+  background: var(--surface);
+  border: var(--ring-line);
+  border-radius: 10px;
+  padding: 13px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.tp-line {
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 13%, transparent);
+}
+.tp-line.title {
+  width: 58%;
+  height: 11px;
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+}
+.tp-line.short {
+  width: 42%;
+}
+.tp-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 2px;
+}
+.tp-btn {
+  height: 22px;
+  width: 68px;
+  border-radius: 7px;
+  background: var(--teal);
+}
+.tp-badge {
+  height: 18px;
+  width: 46px;
+  border-radius: 999px;
+  background: var(--teal-soft);
+}
